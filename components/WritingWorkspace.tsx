@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useEffect } from 'react';
+import React, { useState, useCallback, useEffect, useRef } from 'react';
 import { Project, SelectableItem, OutlineSection, Character, ChatMessage } from '../types';
 import LeftSidebar from './LeftSidebar';
 import MainContent from './MainContent';
@@ -95,17 +95,62 @@ const toggleCharacterAssociationRecursively = (sections: OutlineSection[], secti
 interface WritingWorkspaceProps {
   project: Project;
   onBack: () => void;
+  onUpdateProject: (updatedProject: Project) => Promise<void>;
 }
 
-const WritingWorkspace: React.FC<WritingWorkspaceProps> = ({ project, onBack }) => {
+export type SaveStatus = 'unsaved' | 'saving' | 'saved' | 'error';
+
+
+const WritingWorkspace: React.FC<WritingWorkspaceProps> = ({ project, onBack, onUpdateProject }) => {
   const [currentProject, setCurrentProject] = useState<Project>(project);
   const [activeTab, setActiveTab] = useState<'outline' | 'characters'>('outline');
-  const [selectedItem, setSelectedItem] = useState<SelectableItem | null>(currentProject.outline[0] || null);
+  const [selectedItem, setSelectedItem] = useState<SelectableItem | null>(null);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   // State to hold the full conversation history for the API
   const [conversationHistory, setConversationHistory] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [isGeneratingImage, setIsGeneratingImage] = useState(false);
+  const [saveStatus, setSaveStatus] = useState<SaveStatus>('saved');
+
+  const debounceTimeoutRef = useRef<number | null>(null);
+
+  // Debounced save effect
+  useEffect(() => {
+    // This effect is triggered whenever currentProject changes.
+    // It replaces the old, immediate useEffect.
+
+    // Don't save if the project is the same as the initial prop (initial load)
+    if (currentProject === project) {
+        return;
+    }
+    
+    setSaveStatus('unsaved');
+
+    // Clear any existing timer
+    if (debounceTimeoutRef.current) {
+        clearTimeout(debounceTimeoutRef.current);
+    }
+
+    // Set a new timer
+    debounceTimeoutRef.current = window.setTimeout(async () => {
+        setSaveStatus('saving');
+        try {
+            await onUpdateProject(currentProject);
+            setSaveStatus('saved');
+        } catch (error) {
+            console.error("Debounced save failed:", error);
+            setSaveStatus('error');
+        }
+    }, 1500); // Wait 1.5 seconds after the last change to save
+
+    // Cleanup function to clear the timer if the component unmounts
+    return () => {
+        if (debounceTimeoutRef.current) {
+            clearTimeout(debounceTimeoutRef.current);
+        }
+    };
+  }, [currentProject, onUpdateProject, project]);
+
 
 
   // If the project prop changes (e.g., user goes back and selects a new one), reset state
@@ -113,25 +158,33 @@ const WritingWorkspace: React.FC<WritingWorkspaceProps> = ({ project, onBack }) 
     setCurrentProject(project);
     const initialSelectedItem = project.outline[0] || project.characters[0] || null;
     setSelectedItem(initialSelectedItem);
-    setActiveTab('outline');
+    setActiveTab(initialSelectedItem?.type === 'character' ? 'characters' : 'outline');
     const initialMessage = { role: 'model' as const, text: `Hello! How can I help you with '${project.title}' today?` };
     setMessages([initialMessage]);
     // Also reset the API conversation history
     setConversationHistory([{ role: 'model', parts: [{ text: initialMessage.text }] }]);
     setIsLoading(false);
+    setSaveStatus('saved');
   }, [project]);
 
   const handleSelectItem = useCallback((item: SelectableItem) => {
     setSelectedItem(item);
   }, []);
   
+  // FIX: Use a functional update for setSelectedItem to avoid stale state bugs.
+  // This ensures the update is based on the most recent state.
   const handleUpdateOutlineTitle = (sectionId: string, newTitle: string) => {
     setCurrentProject(prevProject => {
         const newOutline = updateTitleRecursively(prevProject.outline, sectionId, newTitle);
         const updatedProject = { ...prevProject, outline: newOutline };
 
         if (selectedItem?.id === sectionId && selectedItem.type === 'outline') {
-            setSelectedItem({ ...selectedItem, title: newTitle });
+            setSelectedItem(prev => {
+                if (prev?.type === 'outline' && prev.id === sectionId) {
+                    return { ...prev, title: newTitle };
+                }
+                return prev;
+            });
         }
         
         return updatedProject;
@@ -159,6 +212,9 @@ const WritingWorkspace: React.FC<WritingWorkspaceProps> = ({ project, onBack }) 
         });
     };
 
+    // FIX: Corrected the setSelectedItem call to use a type guard within the
+    // functional update. This resolves the TypeScript error caused by spreading
+    // a union type and also makes the state update robust against race conditions.
     const handleUpdateOutlineSection = (args: { sectionId: string; newTitle?: string; newContent?: string }) => {
         const { sectionId, newTitle, newContent } = args;
         const updates: Partial<OutlineSection> = {};
@@ -170,7 +226,12 @@ const WritingWorkspace: React.FC<WritingWorkspaceProps> = ({ project, onBack }) 
             const updatedProject = { ...prevProject, outline: newOutline };
 
             if (selectedItem?.id === sectionId && selectedItem.type === 'outline') {
-                setSelectedItem(prev => ({ ...prev!, ...updates }));
+                setSelectedItem(prev => {
+                    if (prev?.type === 'outline' && prev.id === sectionId) {
+                        return { ...prev, ...updates };
+                    }
+                    return prev;
+                });
             }
             return updatedProject;
         });
@@ -190,6 +251,101 @@ const WritingWorkspace: React.FC<WritingWorkspaceProps> = ({ project, onBack }) 
         });
     };
 
+    const handleMoveOutlineSection = (args: {
+        sectionId: string;
+        targetParentId?: string;
+        targetSiblingId?: string;
+        position?: 'before' | 'after';
+    }) => {
+        const { sectionId, targetParentId, targetSiblingId, position } = args;
+
+        setCurrentProject(prevProject => {
+            const outline = JSON.parse(JSON.stringify(prevProject.outline));
+            let movedItem: OutlineSection | null = null;
+            
+            const isDescendant = (node: OutlineSection, parentId: string): boolean => {
+                if (node.id === parentId) return true;
+                if (node.children) {
+                    return node.children.some(child => isDescendant(child, parentId));
+                }
+                return false;
+            };
+
+            const findAndRemove = (sections: OutlineSection[], id: string): OutlineSection[] => {
+                return sections.filter(section => {
+                    if (section.id === id) {
+                        movedItem = section;
+                        return false;
+                    }
+                    if (section.children) {
+                        section.children = findAndRemove(section.children, id);
+                    }
+                    return true;
+                });
+            };
+
+            const outlineWithoutMoved = findAndRemove(outline, sectionId);
+            if (!movedItem) {
+                console.error("Item to move not found:", sectionId);
+                return prevProject;
+            }
+
+            // Prevent dropping a parent into its own child.
+            if (targetParentId && isDescendant(movedItem, targetParentId)) {
+                console.warn("Cannot move a parent section into one of its own children.");
+                return prevProject;
+            }
+            if (targetSiblingId && isDescendant(movedItem, targetSiblingId)) {
+                console.warn("Cannot move a parent section into one of its own children.");
+                return prevProject;
+            }
+
+            let newOutline = outlineWithoutMoved;
+            let inserted = false;
+
+            if (targetSiblingId && position) {
+                const findAndInsertBySibling = (sections: OutlineSection[]): OutlineSection[] => {
+                    if (inserted) return sections;
+
+                    const targetIndex = sections.findIndex(s => s.id === targetSiblingId);
+                    if (targetIndex > -1) {
+                        const insertIndex = position === 'before' ? targetIndex : targetIndex + 1;
+                        sections.splice(insertIndex, 0, movedItem!);
+                        inserted = true;
+                        return sections;
+                    }
+
+                    return sections.map(section => {
+                        if (section.children && !inserted) {
+                            section.children = findAndInsertBySibling(section.children);
+                        }
+                        return section;
+                    });
+                };
+                newOutline = findAndInsertBySibling(newOutline);
+            } else if (targetParentId) {
+                const findAndInsertInParent = (sections: OutlineSection[]): OutlineSection[] => {
+                    if (inserted) return sections;
+                    return sections.map(section => {
+                        if (section.id === targetParentId) {
+                            section.children = [...(section.children || []), movedItem!];
+                            inserted = true;
+                        } else if (section.children && !inserted) {
+                            section.children = findAndInsertInParent(section.children);
+                        }
+                        return section;
+                    });
+                };
+                newOutline = findAndInsertInParent(newOutline);
+            } else {
+                // No target parent or sibling, so move to root.
+                newOutline.push(movedItem);
+            }
+
+            return { ...prevProject, outline: newOutline };
+        });
+    };
+
 
   const handleAddSubItem = (parentId: string) => {
     // This is now just for manual user clicks
@@ -205,6 +361,23 @@ const WritingWorkspace: React.FC<WritingWorkspaceProps> = ({ project, onBack }) 
     handleUpdateOutlineSection({ sectionId, newContent });
   };
 
+  const handleAddCharacter = (args: { name: string; description: string; backstory: string; relationships: string; }) => {
+    const { name, description, backstory, relationships } = args;
+    const newCharacter: Character = {
+        id: uuidv4(),
+        name,
+        description,
+        backstory,
+        relationships,
+        type: 'character',
+    };
+    setCurrentProject(prevProject => ({
+        ...prevProject,
+        characters: [...prevProject.characters, newCharacter],
+    }));
+  };
+
+  // FIX: Use a functional update for setSelectedItem to avoid stale state bugs.
   const handleUpdateCharacter = (characterId: string, updatedData: Partial<Character>) => {
     setCurrentProject(prevProject => {
         const newCharacters = prevProject.characters.map(char =>
@@ -213,24 +386,50 @@ const WritingWorkspace: React.FC<WritingWorkspaceProps> = ({ project, onBack }) 
         const updatedProject = { ...prevProject, characters: newCharacters };
 
         if (selectedItem?.id === characterId && selectedItem.type === 'character') {
-            setSelectedItem({ ...selectedItem, ...updatedData });
+            setSelectedItem(prev => {
+                if (prev?.type === 'character' && prev.id === characterId) {
+                    return { ...prev, ...updatedData };
+                }
+                return prev;
+            });
         }
 
         return updatedProject;
     });
   };
 
+  const handleDeleteCharacter = (args: { characterId: string }) => {
+    const { characterId } = args;
+    setCurrentProject(prevProject => {
+        const newCharacters = prevProject.characters.filter(c => c.id !== characterId);
+        const updatedProject = { ...prevProject, characters: newCharacters };
+        // If the deleted item was selected, deselect it
+        if (selectedItem?.id === characterId) {
+            setSelectedItem(null);
+        }
+        return updatedProject;
+    });
+  };
+
+
+  // FIX: Use a functional update for setSelectedItem to avoid stale state bugs and
+  // ensure the character association is toggled based on the latest state.
   const handleToggleCharacterAssociation = (sectionId: string, characterId: string) => {
      setCurrentProject(prevProject => {
         const newOutline = toggleCharacterAssociationRecursively(prevProject.outline, sectionId, characterId);
         const updatedProject = { ...prevProject, outline: newOutline };
         
         if (selectedItem?.id === sectionId && selectedItem.type === 'outline') {
-            const currentIds = selectedItem.characterIds || [];
-            const newIds = currentIds.includes(characterId)
-                ? currentIds.filter(id => id !== characterId)
-                : [...currentIds, characterId];
-            setSelectedItem({ ...selectedItem, characterIds: newIds });
+            setSelectedItem(prev => {
+                if (prev?.type === 'outline' && prev.id === sectionId) {
+                    const currentIds = prev.characterIds || [];
+                    const newIds = currentIds.includes(characterId)
+                        ? currentIds.filter(id => id !== characterId)
+                        : [...currentIds, characterId];
+                    return { ...prev, characterIds: newIds };
+                }
+                return prev;
+            });
         }
 
         return updatedProject;
@@ -312,6 +511,7 @@ const WritingWorkspace: React.FC<WritingWorkspaceProps> = ({ project, onBack }) 
     }, []);
 
     const handleSendMessage = async (userInput: string) => {
+        console.log(userInput);
         if (!userInput.trim() || isLoading) return;
     
         const userMessage: ChatMessage = { role: 'user', text: userInput };
@@ -320,31 +520,75 @@ const WritingWorkspace: React.FC<WritingWorkspaceProps> = ({ project, onBack }) 
 
         const userTurn = { role: 'user', parts: [{ text: userInput }] };
         const currentHistory = [...conversationHistory, userTurn];
-    
+
         try {
             const response = await getGeminiResponse(currentHistory, currentProject, selectedItem);
             
+            console.log(response);    
             if (response.functionCalls && response.functionCalls.length > 0) {
-                // The model wants to call a function.
-                
-                // Get the model's turn (the function call request).
-                const modelTurn = { role: 'model', parts: response.candidates[0].content.parts };
-                
+                // Reconstruct the model's turn from the parsed function calls for safety.
+                // This prevents potential errors from malformed `content` objects in the API response,
+                // which could otherwise cause the application to hang.
+                const modelTurn = {
+                    role: 'model' as const,
+                    parts: response.functionCalls.map(fc => ({ functionCall: fc }))
+                };
+
                 // Execute the functions and collect the results into parts.
                 const toolParts = response.functionCalls.map(call => {
                     let result: any;
                     try {
                         switch (call.name) {
                             case 'addOutlineSection':
-                                handleAddOutlineSection(call.args);
+                                // FIX: Cast arguments from function call to the expected type.
+                                handleAddOutlineSection(call.args as { parentId?: string; title: string; content?: string; });
                                 result = { success: true };
                                 break;
                             case 'updateOutlineSection':
-                                handleUpdateOutlineSection(call.args);
+                                // FIX: Cast arguments from function call to the expected type.
+                                handleUpdateOutlineSection(call.args as { sectionId: string; newTitle?: string; newContent?: string; });
                                 result = { success: true };
                                 break;
                             case 'deleteOutlineSection':
-                                handleDeleteOutlineSection(call.args);
+                                // FIX: Cast arguments from function call to the expected type.
+                                handleDeleteOutlineSection(call.args as { sectionId: string; });
+                                result = { success: true };
+                                break;
+                            case 'moveOutlineSection':
+                                handleMoveOutlineSection(call.args as {
+                                    sectionId: string;
+                                    targetParentId?: string;
+                                    targetSiblingId?: string;
+                                    position?: 'before' | 'after';
+                                });
+                                result = { success: true };
+                                break;
+                            case 'addCharacter':
+                                // FIX: Cast arguments from function call to the expected type.
+                                handleAddCharacter(call.args as { name: string; description: string; backstory: string; relationships: string; });
+                                result = { success: true };
+                                break;
+                            case 'updateCharacter': {
+                                // FIX: Cast arguments from function call to the expected type to resolve multiple TypeScript errors.
+                                const { characterId, newName, newDescription, newBackstory, newRelationships } = call.args as {
+                                    characterId: string;
+                                    newName?: string;
+                                    newDescription?: string;
+                                    newBackstory?: string;
+                                    newRelationships?: string;
+                                };
+                                const updates: Partial<Character> = {};
+                                if (newName) updates.name = newName;
+                                if (newDescription) updates.description = newDescription;
+                                if (newBackstory) updates.backstory = newBackstory;
+                                if (newRelationships) updates.relationships = newRelationships;
+                                handleUpdateCharacter(characterId, updates);
+                                result = { success: true };
+                                break;
+                            }
+                            case 'deleteCharacter':
+                                // FIX: Cast arguments from function call to the expected type.
+                                handleDeleteCharacter(call.args as { characterId: string; });
                                 result = { success: true };
                                 break;
                             default:
@@ -461,6 +705,7 @@ const WritingWorkspace: React.FC<WritingWorkspaceProps> = ({ project, onBack }) 
             onAddSubItem={handleAddSubItem}
             onAddRootItem={handleAddRootItem}
             onReorderOutline={handleReorderOutline}
+            saveStatus={saveStatus}
         />
         <MainContent 
           item={selectedItem} 

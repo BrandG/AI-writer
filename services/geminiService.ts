@@ -1,5 +1,6 @@
 import { GoogleGenAI, Modality, FunctionDeclaration, Type, GenerateContentResponse } from "@google/genai";
 import { Project, ChatMessage, SelectableItem, OutlineSection, Character } from '../types';
+import { v4 as uuidv4 } from 'uuid';
 
 // Define the tools (functions) the AI can call
 const addOutlineSectionTool: FunctionDeclaration = {
@@ -42,10 +43,73 @@ const deleteOutlineSectionTool: FunctionDeclaration = {
     },
 };
 
+const moveOutlineSectionTool: FunctionDeclaration = {
+    name: 'moveOutlineSection',
+    description: 'Moves an existing section to a new position in the outline. Can be used to reorder sections or change their nesting level.',
+    parameters: {
+        type: Type.OBJECT,
+        properties: {
+            sectionId: { type: Type.STRING, description: 'The ID of the section to move.' },
+            targetParentId: { type: Type.STRING, description: 'Optional. The ID of the new parent section. If omitted and no sibling is specified, the section becomes a root item.' },
+            targetSiblingId: { type: Type.STRING, description: 'Optional. The ID of an existing section to place the moved section next to.' },
+            position: { type: Type.STRING, description: "Required if 'targetSiblingId' is provided. Can be 'before' or 'after'." },
+        },
+        required: ['sectionId'],
+    },
+};
+
+const addCharacterTool: FunctionDeclaration = {
+    name: 'addCharacter',
+    description: 'Adds a new character to the project.',
+    parameters: {
+        type: Type.OBJECT,
+        properties: {
+            name: { type: Type.STRING, description: 'The name of the new character.' },
+            description: { type: Type.STRING, description: 'A detailed description of the character.' },
+            backstory: { type: Type.STRING, description: 'The backstory of the character.' },
+            relationships: { type: Type.STRING, description: "The character's relationships with others." },
+        },
+        required: ['name', 'description', 'backstory', 'relationships'],
+    },
+};
+
+const updateCharacterTool: FunctionDeclaration = {
+    name: 'updateCharacter',
+    description: 'Updates an existing character in the project.',
+    parameters: {
+        type: Type.OBJECT,
+        properties: {
+            characterId: { type: Type.STRING, description: 'The ID of the character to update.' },
+            newName: { type: Type.STRING, description: 'The new name for the character.' },
+            newDescription: { type: Type.STRING, description: 'The new description for the character.' },
+            newBackstory: { type: Type.STRING, description: 'The new backstory for the character.' },
+            newRelationships: { type: Type.STRING, description: 'The new relationships for the character.' },
+        },
+        required: ['characterId'],
+    },
+};
+
+const deleteCharacterTool: FunctionDeclaration = {
+    name: 'deleteCharacter',
+    description: 'Deletes an existing character from the project.',
+    parameters: {
+        type: Type.OBJECT,
+        properties: {
+            characterId: { type: Type.STRING, description: 'The ID of the character to delete.' },
+        },
+        required: ['characterId'],
+    },
+};
+
+
 export const functionDeclarations: FunctionDeclaration[] = [
     addOutlineSectionTool,
     updateOutlineSectionTool,
     deleteOutlineSectionTool,
+    moveOutlineSectionTool,
+    addCharacterTool,
+    updateCharacterTool,
+    deleteCharacterTool,
 ];
 
 function formatOutlineWithIds(outline: OutlineSection[], level = 0): string {
@@ -68,9 +132,9 @@ function formatProjectContext(project: Project, selectedItem: SelectableItem | n
     context += `Genre: ${project.genre}\n`;
     context += `Description: ${project.description}\n\n`;
 
-    context += `CHARACTERS:\n`;
+    context += `CHARACTERS (with IDs for targeting):\n`;
     project.characters.forEach(char => {
-        context += `- ${char.name}: ${char.description}\n`;
+        context += `- ${char.name} (ID: ${char.id}): ${char.description}\n`;
     });
     context += `\nOUTLINE (with IDs for targeting):\n`;
     context += formatOutlineWithIds(project.outline);
@@ -79,7 +143,7 @@ function formatProjectContext(project: Project, selectedItem: SelectableItem | n
     if (selectedItem) {
         context += `\nCURRENTLY VIEWING:\n`;
         if (selectedItem.type === 'character') {
-            context += `Character: ${selectedItem.name}\nDetails: ${selectedItem.description}\nBackstory: ${selectedItem.backstory}\n`;
+            context += `Character: ${selectedItem.name} (ID: ${selectedItem.id})\nDetails: ${selectedItem.description}\nBackstory: ${selectedItem.backstory}\n`;
         } else {
             context += `Outline Section: ${selectedItem.title} (ID: ${selectedItem.id})\nContent: ${selectedItem.content}\n`;
             if (selectedItem.characterIds && selectedItem.characterIds.length > 0) {
@@ -105,8 +169,16 @@ export const getGeminiResponse = async (
     const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
 
     const projectContext = formatProjectContext(project, selectedItem);
-    const systemInstruction = `You are a helpful and creative writing assistant. Your goal is to help a writer develop their story. Use the provided project context and chat history to give insightful and relevant answers.
-You have access to tools to modify the project outline. If the user asks for a change to the outline, use the provided functions. Otherwise, respond with text.
+    const systemInstruction = `You are a helpful and creative writing assistant. Your primary function is to help a writer manage their story's structure.
+You have been given a set of tools to modify the project's outline and characters.
+
+**CRITICAL INSTRUCTIONS:**
+1.  When a user's request involves creating, adding, updating, modifying, deleting, moving, or reordering project data (characters or outline sections), you should prioritize using a tool.
+2.  If the user's intent is clear, execute the function call directly. Do not confirm an action before making the tool call.
+3.  If the user's intent is clearly intended to call a function, do NOT respond with JSON or code in your text response. Use the tools to make changes.
+4.  For general conversation, brainstorming, or questions that do not involve direct modification of the project data, you should respond with a helpful text answer.
+
+Use the provided project context and chat history to give insightful and relevant answers.
 
 ${projectContext}`;
 
@@ -116,8 +188,8 @@ ${projectContext}`;
             contents: contents,
             config: {
                 systemInstruction: systemInstruction,
+                tools: [{ functionDeclarations }],
             },
-            tools: [{ functionDeclarations }],
         });
 
         return response;
@@ -206,5 +278,97 @@ Description: ${character.description}`;
     } catch (error) {
         console.error("Error generating character image:", error);
         throw new Error("Sorry, I encountered an error while generating the image. Please try again.");
+    }
+};
+
+export const generateInitialProjectData = async (
+    title: string,
+    genre: string,
+    description: string
+): Promise<{ outline: OutlineSection[], characters: Character[] }> => {
+    if (!process.env.API_KEY) {
+        throw new Error("AI is disabled. API key is missing.");
+    }
+    const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+
+    const systemInstruction = `You are an expert story structure consultant and writer. Based on the provided project format and elevator pitch, generate a foundational story outline and a list of 2-3 key characters.
+The outline should follow common narrative structures relevant to the format (e.g., Three-Act Structure for a script, key chapters for a novel).
+The characters should be compelling and fit the story's theme.
+Return the data in the specified JSON format.`;
+
+    const userPrompt = `
+Project Title: ${title}
+Format: ${genre}
+Elevator Pitch: ${description}
+
+Please generate the initial characters and outline for this project.
+`;
+
+    const schema = {
+        type: Type.OBJECT,
+        properties: {
+            characters: {
+                type: Type.ARRAY,
+                description: 'A list of 2-3 main characters for the story.',
+                items: {
+                    type: Type.OBJECT,
+                    properties: {
+                        name: { type: Type.STRING, description: "The character's full name." },
+                        description: { type: Type.STRING, description: "A brief description of the character's personality, appearance, and role in the story." },
+                        backstory: { type: Type.STRING, description: "The character's history and key motivations." },
+                        relationships: { type: Type.STRING, description: "How this character relates to other main characters." },
+                    },
+                    required: ['name', 'description', 'backstory', 'relationships'],
+                },
+            },
+            outline: {
+                type: Type.ARRAY,
+                description: 'A structured story outline with key plot points, acts, or chapters.',
+                items: {
+                    type: Type.OBJECT,
+                    properties: {
+                        title: { type: Type.STRING, description: 'The title of this outline section (e.g., Act I, Chapter 1: The Inciting Incident).' },
+                        content: { type: Type.STRING, description: 'A detailed summary of what happens in this section of the story.' },
+                    },
+                    required: ['title', 'content'],
+                },
+            },
+        },
+        required: ['characters', 'outline'],
+    };
+
+
+    try {
+        const response = await ai.models.generateContent({
+            model: 'gemini-2.5-flash',
+            contents: [{ role: 'user', parts: [{ text: userPrompt }] }],
+            config: {
+                systemInstruction: systemInstruction,
+                responseMimeType: "application/json",
+                responseSchema: schema,
+            },
+        });
+        
+        const jsonResponse = JSON.parse(response.text);
+        
+        // Add IDs and types to the generated data
+        const characters = jsonResponse.characters.map((char: Omit<Character, 'id' | 'type'>) => ({
+            ...char,
+            id: uuidv4(),
+            type: 'character' as const,
+        }));
+
+        const outline = jsonResponse.outline.map((section: Omit<OutlineSection, 'id' | 'type'>) => ({
+            ...section,
+            id: uuidv4(),
+            type: 'outline' as const,
+            children: [],
+        }));
+        
+        return { characters, outline };
+
+    } catch (error) {
+        console.error("Error generating initial project data:", error);
+        throw new Error("The AI failed to generate project data. It might be experiencing high traffic. Please try again.");
     }
 };

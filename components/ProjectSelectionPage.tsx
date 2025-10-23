@@ -1,38 +1,271 @@
-
-import React from 'react';
+import React, { useState } from 'react';
 import { Project } from '../types';
 
 interface ProjectSelectionPageProps {
-  projects: Project[];
+  savedProjects: Project[];
   onSelectProject: (project: Project) => void;
+  onDeleteProject: (projectId: string) => void;
+  onUpdateProjectTitle: (projectId: string, newTitle: string) => void;
+  onAddProject: (data: { title: string; genre: string; description: string; }) => Promise<void>;
 }
 
-const ProjectCard: React.FC<{ project: Project; onSelect: () => void }> = ({ project, onSelect }) => (
-  <div className="bg-gray-800 rounded-lg shadow-lg p-6 flex flex-col hover:bg-gray-700 transition-colors duration-200 transform hover:-translate-y-1">
-    <h3 className="text-xl font-bold text-cyan-400 mb-2">{project.title}</h3>
-    <p className="text-sm font-semibold text-gray-400 mb-4">{project.genre}</p>
-    <p className="text-gray-300 flex-grow mb-6">{project.description}</p>
-    <button
-      onClick={onSelect}
-      className="mt-auto bg-cyan-600 text-white font-bold py-2 px-4 rounded-md hover:bg-cyan-500 transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-cyan-400 focus:ring-opacity-75"
-    >
-      Open Project
-    </button>
-  </div>
+const TrashIcon: React.FC<{ className?: string }> = ({ className }) => (
+    <svg xmlns="http://www.w3.org/2000/svg" className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor">
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+    </svg>
 );
 
-const ProjectSelectionPage: React.FC<ProjectSelectionPageProps> = ({ projects, onSelectProject }) => {
+const EditIcon: React.FC<{ className?: string }> = ({ className }) => (
+    <svg xmlns="http://www.w3.org/2000/svg" className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor">
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.5L15.232 5.232z" />
+    </svg>
+);
+
+
+const ProjectCard: React.FC<{ project: Project; onSelect: () => void; onDelete?: () => void; onUpdateTitle?: (newTitle: string) => void; }> = ({ project, onSelect, onDelete, onUpdateTitle }) => {
+    const [isEditing, setIsEditing] = useState(false);
+    const [currentTitle, setCurrentTitle] = useState(project.title);
+
+    const handleTitleUpdate = () => {
+        const trimmedTitle = currentTitle.trim();
+        if (trimmedTitle && trimmedTitle !== project.title) {
+            onUpdateTitle?.(trimmedTitle);
+        } else {
+            setCurrentTitle(project.title); // Revert if empty or unchanged
+        }
+        setIsEditing(false);
+    };
+
+    const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+        if (e.key === 'Enter') {
+            handleTitleUpdate();
+        } else if (e.key === 'Escape') {
+            setCurrentTitle(project.title);
+            setIsEditing(false);
+        }
+    };
+
+    const handleStartEditing = (e: React.MouseEvent) => {
+        e.stopPropagation();
+        if (onUpdateTitle) {
+            setIsEditing(true);
+        }
+    };
+
+    return (
+        <div className="bg-gray-800 rounded-lg shadow-lg p-6 flex flex-col hover:bg-gray-700 transition-colors duration-200 transform hover:-translate-y-1">
+            {isEditing ? (
+                 <div className="mb-2">
+                    <input
+                        type="text"
+                        value={currentTitle}
+                        onChange={(e) => setCurrentTitle(e.target.value)}
+                        onBlur={handleTitleUpdate}
+                        onKeyDown={handleKeyDown}
+                        autoFocus
+                        className="w-full text-xl font-bold text-cyan-400 bg-gray-700 border border-cyan-500 rounded-md p-1 focus:outline-none focus:ring-2 focus:ring-cyan-400"
+                        onClick={(e) => e.stopPropagation()}
+                    />
+                </div>
+            ) : (
+                <div 
+                    className={`group flex items-center justify-between gap-2 mb-2 ${onUpdateTitle ? 'cursor-pointer rounded-md -m-1 p-1 hover:bg-gray-700/50' : ''}`}
+                    onClick={handleStartEditing}
+                >
+                    <h3 className="text-xl font-bold text-cyan-400 truncate" title={project.title}>
+                        {project.title}
+                    </h3>
+                    {onUpdateTitle && (
+                        <EditIcon className="h-4 w-4 text-gray-400 opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0" />
+                    )}
+                </div>
+            )}
+            <p className="text-sm font-semibold text-gray-400 mb-4">{project.genre}</p>
+            <p className="text-gray-300 flex-grow mb-6 line-clamp-3">{project.description}</p>
+            <div className="flex items-center justify-between mt-auto pt-4 border-t border-gray-700/50">
+                <button
+                onClick={onSelect}
+                className="bg-cyan-600 text-white font-bold py-2 px-4 rounded-md hover:bg-cyan-500 transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-cyan-400 focus:ring-opacity-75"
+                >
+                Open Project
+                </button>
+                {onDelete && (
+                    <button
+                    onClick={(e) => { e.stopPropagation(); onDelete(); }}
+                    aria-label={`Delete project ${project.title}`}
+                    className="p-2 text-gray-400 hover:text-red-500 transition-colors duration-200 rounded-full hover:bg-gray-700"
+                    >
+                        <TrashIcon className="h-5 w-5" />
+                    </button>
+                )}
+            </div>
+        </div>
+    );
+};
+
+const AddProjectModal: React.FC<{
+    isOpen: boolean;
+    onClose: () => void;
+    onAddProject: (data: { title: string; genre: string; description: string; }) => Promise<void>;
+    isCreating: boolean;
+}> = ({ isOpen, onClose, onAddProject, isCreating }) => {
+    const [title, setTitle] = useState('');
+    const [genre, setGenre] = useState('Novel');
+    const [description, setDescription] = useState('');
+
+    if (!isOpen) return null;
+
+    const handleSubmit = async (e: React.FormEvent) => {
+        e.preventDefault();
+        if (!title.trim() || isCreating) {
+            return;
+        }
+        await onAddProject({ title: title.trim(), genre, description: description.trim() });
+    };
+
+    const handleClose = () => {
+        if (isCreating) return;
+        // Reset form state on close
+        setTitle('');
+        setGenre('Novel');
+        setDescription('');
+        onClose();
+    };
+
+    return (
+        <div 
+            className="fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center z-50 transition-opacity" 
+            aria-modal="true" 
+            role="dialog"
+            onClick={handleClose}
+        >
+            <div 
+                className="bg-gray-800 rounded-lg shadow-xl p-8 max-w-lg w-full transform transition-all relative"
+                onClick={(e) => e.stopPropagation()} // Prevent closing when clicking inside modal
+            >
+                {isCreating && (
+                    <div className="absolute inset-0 bg-gray-800 bg-opacity-80 flex flex-col items-center justify-center z-10 rounded-lg">
+                        <div className="w-8 h-8 border-4 border-cyan-400 border-t-transparent rounded-full animate-spin"></div>
+                        <p className="mt-4 text-lg text-gray-300">AI is generating your project...</p>
+                        <p className="text-sm text-gray-500">This may take a moment.</p>
+                    </div>
+                )}
+                <h2 className="text-2xl font-bold mb-6 text-white">Create New Project</h2>
+                <form onSubmit={handleSubmit}>
+                    <fieldset disabled={isCreating}>
+                        <div className="mb-4">
+                            <label htmlFor="project-title" className="block text-sm font-medium text-gray-300 mb-1">Project Title</label>
+                            <input
+                                type="text"
+                                id="project-title"
+                                value={title}
+                                onChange={(e) => setTitle(e.target.value)}
+                                className="w-full bg-gray-700 border border-gray-600 rounded-md p-2 text-white focus:outline-none focus:ring-2 focus:ring-cyan-500 disabled:opacity-50"
+                                required
+                                autoFocus
+                            />
+                        </div>
+                        <div className="mb-4">
+                            <label htmlFor="project-genre" className="block text-sm font-medium text-gray-300 mb-1">Format</label>
+                            <select
+                                id="project-genre"
+                                value={genre}
+                                onChange={(e) => setGenre(e.target.value)}
+                                className="w-full bg-gray-700 border border-gray-600 rounded-md p-2 text-white focus:outline-none focus:ring-2 focus:ring-cyan-500 disabled:opacity-50"
+                            >
+                                <option>Novel</option>
+                                <option>Short Story</option>
+                                <option>TV Script</option>
+                                <option>Theater Script</option>
+                                <option>Game design</option>
+                            </select>
+                        </div>
+                        <div className="mb-6">
+                            <label htmlFor="project-description" className="block text-sm font-medium text-gray-300 mb-1">Elevator Pitch</label>
+                            <textarea
+                                id="project-description"
+                                value={description}
+                                onChange={(e) => setDescription(e.target.value)}
+                                rows={4}
+                                className="w-full bg-gray-700 border border-gray-600 rounded-md p-2 text-white focus:outline-none focus:ring-2 focus:ring-cyan-500 resize-none disabled:opacity-50"
+                                placeholder="A brief summary of your project..."
+                            />
+                        </div>
+                        <div className="flex justify-end gap-4">
+                            <button type="button" onClick={handleClose} className="px-4 py-2 rounded-md text-gray-300 bg-gray-600 hover:bg-gray-500 transition-colors disabled:opacity-50">Cancel</button>
+                            <button type="submit" className="px-4 py-2 rounded-md font-semibold text-white bg-cyan-600 hover:bg-cyan-500 transition-colors disabled:opacity-50 disabled:cursor-not-allowed">Create Project</button>
+                        </div>
+                    </fieldset>
+                </form>
+            </div>
+        </div>
+    );
+};
+
+const ProjectSelectionPage: React.FC<ProjectSelectionPageProps> = ({ savedProjects, onSelectProject, onDeleteProject, onUpdateProjectTitle, onAddProject }) => {
+  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [isCreating, setIsCreating] = useState(false);
+
+  const handleCreateProject = async (data: { title: string; genre: string; description: string; }) => {
+    setIsCreating(true);
+    try {
+        await onAddProject(data);
+        setIsModalOpen(false); // Close modal on success
+    } catch (error) {
+        const errorMessage = error instanceof Error ? error.message : "An unknown error occurred.";
+        console.error("Project creation failed:", error);
+        alert(`There was an error creating your project with the AI:\n${errorMessage}\nPlease try again.`);
+    } finally {
+        setIsCreating(false);
+    }
+  };
+  
   return (
     <div className="container mx-auto p-8">
+      <AddProjectModal 
+        isOpen={isModalOpen}
+        onClose={() => setIsModalOpen(false)}
+        onAddProject={handleCreateProject}
+        isCreating={isCreating}
+      />
+      
       <header className="text-center mb-12">
         <h1 className="text-5xl font-extrabold text-white mb-2">AI Writing Assistant</h1>
-        <p className="text-lg text-gray-400">Choose a project to begin your creative journey.</p>
+        <p className="text-lg text-gray-400">{savedProjects.length > 0 ? "Continue your work or start a new project." : "Create a new project to begin your creative journey."}</p>
       </header>
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
-        {projects.map((project) => (
-          <ProjectCard key={project.id} project={project} onSelect={() => onSelectProject(project)} />
-        ))}
-      </div>
+
+      <section>
+        <div className="flex justify-between items-center mb-6 border-b border-gray-700 pb-3">
+          <h2 className="text-3xl font-bold text-white">Your Projects</h2>
+          <button
+              onClick={() => setIsModalOpen(true)}
+              className="bg-cyan-600 text-white font-bold py-2 px-4 rounded-md hover:bg-cyan-500 transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-cyan-400 focus:ring-opacity-75 flex items-center"
+          >
+              <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 mr-2" viewBox="0 0 20 20" fill="currentColor">
+                  <path fillRule="evenodd" d="M10 3a1 1 0 011 1v5h5a1 1 0 110 2h-5v5a1 1 0 11-2 0v-5H4a1 1 0 110-2h5V4a1 1 0 011-1z" clipRule="evenodd" />
+              </svg>
+              New Project
+          </button>
+        </div>
+        {savedProjects.length > 0 ? (
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
+            {savedProjects.map((project) => (
+              <ProjectCard 
+                key={project.id} 
+                project={project} 
+                onSelect={() => onSelectProject(project)} 
+                onDelete={() => onDeleteProject(project.id)}
+                onUpdateTitle={(newTitle) => onUpdateProjectTitle(project.id, newTitle)}
+              />
+            ))}
+          </div>
+        ) : (
+          <div className="text-center py-16 px-8 bg-gray-800 rounded-lg">
+            <h3 className="text-xl font-semibold text-gray-300">No projects yet</h3>
+            <p className="text-gray-400 mt-2">Click "New Project" to get started on your next masterpiece.</p>
+          </div>
+        )}
+      </section>
     </div>
   );
 };

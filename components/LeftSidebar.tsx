@@ -1,5 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Project, SelectableItem, OutlineSection } from '../types';
+import { SaveStatus } from './WritingWorkspace';
+import StatusIndicator from './StatusIndicator';
 
 interface LeftSidebarProps {
   project: Project;
@@ -12,6 +14,7 @@ interface LeftSidebarProps {
   onAddSubItem: (parentId: string) => void;
   onAddRootItem: () => void;
   onReorderOutline: (draggedId: string, targetId: string, position: 'above' | 'below' | 'on') => void;
+  saveStatus: SaveStatus;
 }
 
 const ArrowLeftIcon: React.FC<{className?: string}> = ({ className }) => (
@@ -208,7 +211,7 @@ const OutlineItem: React.FC<OutlineItemProps> = ({
 };
 
 
-const LeftSidebar: React.FC<LeftSidebarProps> = ({ project, activeTab, setActiveTab, selectedItem, onSelectItem, onBack, onUpdateOutlineTitle, onAddSubItem, onAddRootItem, onReorderOutline }) => {
+const LeftSidebar: React.FC<LeftSidebarProps> = ({ project, activeTab, setActiveTab, selectedItem, onSelectItem, onBack, onUpdateOutlineTitle, onAddSubItem, onAddRootItem, onReorderOutline, saveStatus }) => {
   const [draggedItemId, setDraggedItemId] = useState<string | null>(null);
   const [dragOverInfo, setDragOverInfo] = useState<DragOverInfo | null>(null);
 
@@ -220,7 +223,8 @@ const LeftSidebar: React.FC<LeftSidebarProps> = ({ project, activeTab, setActive
             Back to Projects
         </button>
         <h1 className="text-2xl font-bold truncate">{project.title}</h1>
-        <h2 className="text-sm text-gray-400">{project.genre}</h2>
+        <h2 className="text-sm text-gray-400 mb-2">{project.genre}</h2>
+        <StatusIndicator status={saveStatus} />
       </header>
 
       <div className="flex border-b border-gray-700 mb-4">
