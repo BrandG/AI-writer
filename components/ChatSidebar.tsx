@@ -18,6 +18,7 @@ const SendIcon: React.FC<{className?: string}> = ({ className }) => (
 const ChatSidebar: React.FC<ChatSidebarProps> = ({ project, messages, isLoading, onSendMessage }) => {
   const [userInput, setUserInput] = useState('');
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -25,12 +26,32 @@ const ChatSidebar: React.FC<ChatSidebarProps> = ({ project, messages, isLoading,
 
   useEffect(scrollToBottom, [messages]);
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const submitForm = () => {
     if (!userInput.trim() || isLoading) return;
     onSendMessage(userInput);
     setUserInput('');
   };
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    submitForm();
+  };
+
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      submitForm();
+    }
+  };
+
+  // Effect to auto-resize textarea based on content
+  useEffect(() => {
+    const textarea = textareaRef.current;
+    if (textarea) {
+      textarea.style.height = 'auto'; // Reset height to allow shrinking
+      textarea.style.height = `${textarea.scrollHeight}px`; // Set to new scroll height
+    }
+  }, [userInput]);
 
   return (
     <aside className="w-1/3 max-w-md bg-gray-800 flex flex-col p-4 border-l border-gray-700">
@@ -58,14 +79,17 @@ const ChatSidebar: React.FC<ChatSidebarProps> = ({ project, messages, isLoading,
           <div ref={messagesEndRef} />
         </div>
       </div>
-      <form onSubmit={handleSubmit} className="flex items-center mt-auto">
-        <input
-          type="text"
+      <form onSubmit={handleSubmit} className="flex mt-auto">
+        <textarea
+          ref={textareaRef}
           value={userInput}
           onChange={(e) => setUserInput(e.target.value)}
+          onKeyDown={handleKeyDown}
           placeholder="Ask about your project..."
-          className="flex-grow bg-gray-700 text-white rounded-l-md p-3 border-0 focus:ring-2 focus:ring-cyan-500 focus:outline-none"
+          className="flex-grow bg-gray-700 text-white rounded-l-md p-3 border-0 focus:ring-2 focus:ring-cyan-500 focus:outline-none resize-none"
           disabled={isLoading}
+          rows={1}
+          style={{ maxHeight: '150px' }}
         />
         <button
           type="submit"

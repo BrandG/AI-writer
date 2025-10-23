@@ -1,4 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { Project, SelectableItem, OutlineSection, Character } from '../types';
 import { ActiveTab } from './WritingWorkspace';
 
@@ -246,6 +247,52 @@ const CharacterView: React.FC<{
     )
 };
 
+const DropdownMenu: React.FC<{
+    isOpen: boolean;
+    onClose: () => void;
+    triggerRef: React.RefObject<HTMLElement>;
+    children: React.ReactNode;
+}> = ({ isOpen, onClose, triggerRef, children }) => {
+    const dropdownRef = useRef<HTMLDivElement>(null);
+    const [position, setPosition] = useState<{ top: number; left: number }>({ top: 0, left: 0 });
+
+    useEffect(() => {
+        if (isOpen && triggerRef.current) {
+            const rect = triggerRef.current.getBoundingClientRect();
+            setPosition({
+                top: rect.bottom + window.scrollY,
+                left: rect.left + window.scrollX,
+            });
+        }
+    }, [isOpen, triggerRef]);
+
+    useEffect(() => {
+        if (!isOpen) return;
+        const handleClickOutside = (event: MouseEvent) => {
+            if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
+                onClose();
+            }
+        };
+        document.addEventListener('mousedown', handleClickOutside);
+        return () => document.removeEventListener('mousedown', handleClickOutside);
+    }, [isOpen, onClose]);
+    
+    if (!isOpen) return null;
+
+    return createPortal(
+        <div
+            ref={dropdownRef}
+            style={{ top: `${position.top}px`, left: `${position.left}px` }}
+            className="fixed origin-top-left w-56 rounded-md shadow-lg bg-gray-800 ring-1 ring-black ring-opacity-5 focus:outline-none z-50"
+            role="menu"
+            aria-orientation="vertical"
+        >
+            {children}
+        </div>,
+        document.body
+    );
+};
+
 const OutlineView: React.FC<{
   item: Extract<SelectableItem, { type: 'outline' }>;
   project: Project;
@@ -256,6 +303,7 @@ const OutlineView: React.FC<{
   isGeneratingIllustration: boolean;
 }> = ({ item, project, onUpdateOutlineContent, onToggleCharacterAssociation, onConsistencyCheck, onGenerateIllustration, isGeneratingIllustration }) => {
   const [isDropdownOpen, setDropdownOpen] = useState(false);
+  const triggerRef = useRef<HTMLButtonElement>(null);
 
   const handleToolClick = (toolAction: () => void) => {
     toolAction();
@@ -316,8 +364,9 @@ const OutlineView: React.FC<{
         <div className="mt-4 relative inline-block text-left">
             <div>
                 <button
+                    ref={triggerRef}
                     type="button"
-                    onClick={() => setDropdownOpen(!isDropdownOpen)}
+                    onClick={() => setDropdownOpen(o => !o)}
                     className="inline-flex items-center justify-center rounded-md shadow-sm px-4 py-2 text-sm font-medium text-white bg-gray-700 hover:bg-gray-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-gray-900 focus:ring-cyan-500 transition-colors"
                     id="ai-tools-menu"
                     aria-haspopup="true"
@@ -329,46 +378,35 @@ const OutlineView: React.FC<{
                 </button>
             </div>
 
-            {isDropdownOpen && (
-                <>
-                    {/* Fullscreen transparent backdrop to catch clicks outside */}
-                    <div
-                        className="fixed inset-0 z-5"
-                        onClick={() => setDropdownOpen(false)}
-                        aria-hidden="true"
-                    />
-                    <div 
-                        className="origin-top-left absolute left-0 mt-2 w-56 rounded-md shadow-lg bg-gray-800 ring-1 ring-black ring-opacity-5 focus:outline-none z-10"
-                        role="menu"
-                        aria-orientation="vertical"
-                        aria-labelledby="ai-tools-menu"
+            <DropdownMenu
+                isOpen={isDropdownOpen}
+                onClose={() => setDropdownOpen(false)}
+                triggerRef={triggerRef}
+            >
+                <div className="py-1" role="none">
+                    <button
+                        onClick={() => handleToolClick(() => onConsistencyCheck(item))}
+                        className="w-full text-left text-gray-300 block px-4 py-2 text-sm hover:bg-gray-700 hover:text-white"
+                        role="menuitem"
                     >
-                        <div className="py-1" role="none">
-                            <button
-                                onClick={() => handleToolClick(() => onConsistencyCheck(item))}
-                                className="w-full text-left text-gray-300 block px-4 py-2 text-sm hover:bg-gray-700 hover:text-white"
-                                role="menuitem"
-                            >
-                                Check consistency
-                            </button>
-                            <button
-                                disabled
-                                className="w-full text-left text-gray-500 block px-4 py-2 text-sm cursor-not-allowed"
-                                role="menuitem"
-                            >
-                                Get reading level
-                            </button>
-                            <button
-                                disabled
-                                className="w-full text-left text-gray-500 block px-4 py-2 text-sm cursor-not-allowed"
-                                role="menuitem"
-                            >
-                                Clean up text
-                            </button>
-                        </div>
-                    </div>
-                </>
-            )}
+                        Check consistency
+                    </button>
+                    <button
+                        disabled
+                        className="w-full text-left text-gray-500 block px-4 py-2 text-sm cursor-not-allowed"
+                        role="menuitem"
+                    >
+                        Get reading level
+                    </button>
+                    <button
+                        disabled
+                        className="w-full text-left text-gray-500 block px-4 py-2 text-sm cursor-not-allowed"
+                        role="menuitem"
+                    >
+                        Clean up text
+                    </button>
+                </div>
+            </DropdownMenu>
         </div>
       </CollapsibleSection>
 

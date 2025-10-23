@@ -1,5 +1,5 @@
 import React, { useState, useRef } from 'react';
-import { Project } from '../types';
+import { Project, AiProvider } from '../types';
 
 interface ProjectSelectionPageProps {
   savedProjects: Project[];
@@ -8,6 +8,8 @@ interface ProjectSelectionPageProps {
   onUpdateProjectTitle: (projectId: string, newTitle: string) => void;
   onAddProject: (data: { title: string; genre: string; description: string; }) => Promise<void>;
   onImportProjects: (projects: Project[]) => Promise<void>;
+  aiProvider: AiProvider;
+  onAiProviderChange: (provider: AiProvider) => void;
 }
 
 const TrashIcon: React.FC<{ className?: string }> = ({ className }) => (
@@ -236,7 +238,7 @@ const ConfirmDeleteModal: React.FC<{
 };
 
 
-const ProjectSelectionPage: React.FC<ProjectSelectionPageProps> = ({ savedProjects, onSelectProject, onDeleteProject, onUpdateProjectTitle, onAddProject, onImportProjects }) => {
+const ProjectSelectionPage: React.FC<ProjectSelectionPageProps> = ({ savedProjects, onSelectProject, onDeleteProject, onUpdateProjectTitle, onAddProject, onImportProjects, aiProvider, onAiProviderChange }) => {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isCreating, setIsCreating] = useState(false);
   const [projectToDelete, setProjectToDelete] = useState<Project | null>(null);
@@ -348,6 +350,17 @@ const ProjectSelectionPage: React.FC<ProjectSelectionPageProps> = ({ savedProjec
       <header className="text-center mb-12">
         <h1 className="text-5xl font-extrabold text-white mb-2">AI Writing Assistant</h1>
         <p className="text-lg text-gray-400">{savedProjects.length > 0 ? "Continue your work or start a new project." : "Create a new project to begin your creative journey."}</p>
+        <div className="mt-4 flex justify-center items-center gap-2 text-sm text-gray-400">
+            <span>AI Provider:</span>
+            <select
+                value={aiProvider}
+                onChange={(e) => onAiProviderChange(e.target.value as AiProvider)}
+                className="bg-gray-700 border border-gray-600 rounded-md p-1 text-white focus:outline-none focus:ring-2 focus:ring-cyan-500"
+            >
+                <option value="openai">OpenAI</option>
+                <option value="gemini">Google Gemini</option>
+            </select>
+        </div>
       </header>
 
       <section>

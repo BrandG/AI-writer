@@ -1,3 +1,4 @@
+import OpenAI from "openai";
 
 export interface Character {
   id: string;
@@ -78,3 +79,24 @@ export interface ChatMessage {
 }
 
 export type SelectableItem = Character | OutlineSection;
+
+export type AiProvider = 'openai' | 'gemini';
+
+export interface UnifiedAIResponse {
+    text: string | null;
+    toolCalls?: {
+        id: string;
+        function: {
+            name: string;
+            arguments: string; // JSON string
+        };
+    }[];
+}
+
+export interface AiService {
+    generateInitialProjectData: (title: string, genre: string, description: string) => Promise<{ outline: OutlineSection[], characters: Character[], notes: string }>;
+    getAIResponse: (conversationHistory: OpenAI.Chat.Completions.ChatCompletionMessageParam[], project: Project, selectedItem: SelectableItem | null) => Promise<UnifiedAIResponse>;
+    getConsistencyCheckResponse: (section: OutlineSection, characters: Character[]) => Promise<string>;
+    generateCharacterImage: (character: Character) => Promise<string>;
+    generateIllustrationForSection: (section: OutlineSection, genre: string) => Promise<string>;
+}

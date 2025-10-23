@@ -1,11 +1,11 @@
 
+
 import React, { useState, useCallback, useEffect, useRef } from 'react';
-import { Project, SelectableItem, OutlineSection, Character, ChatMessage } from '../types';
+import { Project, SelectableItem, OutlineSection, Character, ChatMessage, AiService } from '../types';
 import LeftSidebar from './LeftSidebar';
 import MainContent from './MainContent';
 import ChatSidebar from './ChatSidebar';
 import { v4 as uuidv4 } from 'uuid';
-import { getGeminiResponse, getConsistencyCheckResponse, generateCharacterImage, generateIllustrationForSection } from '../services/geminiService';
 
 
 // Recursive helper to update a title in a nested structure
@@ -97,6 +97,7 @@ interface WritingWorkspaceProps {
   project: Project;
   onBack: () => void;
   onUpdateProject: (updatedProject: Project) => Promise<void>;
+  aiService: AiService;
 }
 
 export type SaveStatus = 'unsaved' | 'saving' | 'saved' | 'error';
@@ -104,7 +105,7 @@ export type ActiveTab = 'outline' | 'characters' | 'notes';
 
 
 // FIX: The component was not returning any JSX, causing a type error with React.FC.
-const WritingWorkspace: React.FC<WritingWorkspaceProps> = ({ project, onBack, onUpdateProject }) => {
+const WritingWorkspace: React.FC<WritingWorkspaceProps> = ({ project, onBack, onUpdateProject, aiService }) => {
   const [currentProject, setCurrentProject] = useState<Project>(project);
   const [activeTab, setActiveTab] = useState<ActiveTab>('outline');
   const [selectedItem, setSelectedItem] = useState<SelectableItem | null>(null);
@@ -171,7 +172,7 @@ const WritingWorkspace: React.FC<WritingWorkspaceProps> = ({ project, onBack, on
       setActiveTab(initialSelectedItem?.type === 'character' ? 'characters' : 'outline');
       const initialMessage = { role: 'model' as const, text: `Hello! How can I help you with '${project.title}' today?` };
       setMessages([initialMessage]);
-      setConversationHistory([{ role: 'model', parts: [{ text: initialMessage.text }] }]);
+      setConversationHistory([{ role: 'assistant', content: initialMessage.text }]);
       setIsLoading(false);
       setSaveStatus('saved');
     } else {
@@ -192,18 +193,17 @@ const WritingWorkspace: React.FC<WritingWorkspaceProps> = ({ project, onBack, on
     setCurrentProject(prevProject => {
         const newOutline = updateTitleRecursively(prevProject.outline, sectionId, newTitle);
         const updatedProject = { ...prevProject, outline: newOutline };
-
-        if (selectedItem?.id === sectionId && selectedItem.type === 'outline') {
-            setSelectedItem(prev => {
-                if (prev?.type === 'outline' && prev.id === sectionId) {
-                    return { ...prev, title: newTitle };
-                }
-                return prev;
-            });
-        }
         
         return updatedProject;
     });
+     if (selectedItem?.id === sectionId && selectedItem.type === 'outline') {
+        setSelectedItem(prev => {
+            if (prev?.type === 'outline' && prev.id === sectionId) {
+                return { ...prev, title: newTitle };
+            }
+            return prev;
+        });
+    }
   };
 
     const handleAddOutlineSection = (args: { parentId?: string; title: string; content?: string }) => {
@@ -227,9 +227,6 @@ const WritingWorkspace: React.FC<WritingWorkspaceProps> = ({ project, onBack, on
         });
     };
 
-    // FIX: Corrected the setSelectedItem call to use a type guard within the
-    // functional update. This resolves the TypeScript error caused by spreading
-    // a union type and also makes the state update robust against race conditions.
     const handleUpdateOutlineSection = (args: { sectionId: string; newTitle?: string; newContent?: string }) => {
         const { sectionId, newTitle, newContent } = args;
         const updates: Partial<OutlineSection> = {};
@@ -238,17 +235,14 @@ const WritingWorkspace: React.FC<WritingWorkspaceProps> = ({ project, onBack, on
 
         setCurrentProject(prevProject => {
             const newOutline = updateSectionRecursively(prevProject.outline, sectionId, updates);
-            const updatedProject = { ...prevProject, outline: newOutline };
+            return { ...prevProject, outline: newOutline };
+        });
 
-            if (selectedItem?.id === sectionId && selectedItem.type === 'outline') {
-                setSelectedItem(prev => {
-                    if (prev?.type === 'outline' && prev.id === sectionId) {
-                        return { ...prev, ...updates };
-                    }
-                    return prev;
-                });
+        setSelectedItem(prev => {
+            if (prev?.id === sectionId && prev.type === 'outline') {
+                return { ...prev, ...updates };
             }
-            return updatedProject;
+            return prev;
         });
     };
 
@@ -383,18 +377,14 @@ const WritingWorkspace: React.FC<WritingWorkspaceProps> = ({ project, onBack, on
             const newCharacters = prevProject.characters.map(char =>
                 char.id === characterId ? { ...char, ...updatedData } : char
             );
-            const updatedProject = { ...prevProject, characters: newCharacters };
-            
-            if (selectedItem?.id === characterId && selectedItem.type === 'character') {
-                setSelectedItem(prev => {
-                    if (prev?.type === 'character' && prev.id === characterId) {
-                        return { ...prev, ...updatedData };
-                    }
-                    return prev;
-                });
+            return { ...prevProject, characters: newCharacters };
+        });
+        
+        setSelectedItem(prev => {
+            if (prev?.id === characterId && prev.type === 'character') {
+                return { ...prev, ...updatedData };
             }
-
-            return updatedProject;
+            return prev;
         });
     };
     
@@ -434,9 +424,24 @@ const WritingWorkspace: React.FC<WritingWorkspaceProps> = ({ project, onBack, on
     const handleConsistencyCheck = async (section: OutlineSection) => {
         setIsLoading(true);
         setMessages(prev => [...prev, { role: 'model', text: 'Checking for character consistency in this section...' }]);
+        
+        const associatedCharacterIds = section.characterIds || [];
+
+        if (associatedCharacterIds.length === 0) {
+            setMessages(prev => [...prev, { 
+                role: 'model', 
+                text: 'No characters are associated with this section. Please associate one or more characters before running a consistency check.' 
+            }]);
+            setIsLoading(false);
+            return;
+        }
+
         try {
-            const associatedChars = currentProject.characters.filter(c => section.characterIds?.includes(c.id));
-            const analysis = await getConsistencyCheckResponse(section, associatedChars.length > 0 ? associatedChars : currentProject.characters);
+            const associatedCharacters = currentProject.characters.filter(char => 
+                associatedCharacterIds.includes(char.id)
+            );
+
+            const analysis = await aiService.getConsistencyCheckResponse(section, associatedCharacters);
             setMessages(prev => [...prev, { role: 'model', text: analysis }]);
         } catch (error) {
             const errorMessage = error instanceof Error ? error.message : "An unknown error occurred.";
@@ -452,12 +457,12 @@ const WritingWorkspace: React.FC<WritingWorkspaceProps> = ({ project, onBack, on
         
         setIsGeneratingImage(true);
         try {
-            const base64Image = await generateCharacterImage(character);
+            const base64Image = await aiService.generateCharacterImage(character);
             handleUpdateCharacter(characterId, { imageUrl: base64Image });
         } catch (error) {
             console.error(error);
-            // Optionally show an error message in the chat
-            setMessages(prev => [...prev, { role: 'model', text: `Sorry, I couldn't generate an image for ${character.name}. Please try again.` }]);
+            const errorMessage = error instanceof Error ? error.message : "An unknown error occurred.";
+            setMessages(prev => [...prev, { role: 'model', text: `Sorry, I couldn't generate an image for ${character.name}: ${errorMessage}` }]);
         } finally {
             setIsGeneratingImage(false);
         }
@@ -480,22 +485,21 @@ const WritingWorkspace: React.FC<WritingWorkspaceProps> = ({ project, onBack, on
 
         setIsGeneratingIllustration(true);
         try {
-            const base64Image = await generateIllustrationForSection(section, currentProject.genre);
+            const base64Image = await aiService.generateIllustrationForSection(section, currentProject.genre);
             setCurrentProject(prevProject => {
                 const newOutline = updateSectionRecursively(prevProject.outline, sectionId, { imageUrl: base64Image });
                 return { ...prevProject, outline: newOutline };
             });
-            if (selectedItem?.id === sectionId && selectedItem.type === 'outline') {
-                 setSelectedItem(prev => {
-                    if (prev?.type === 'outline' && prev.id === sectionId) {
-                        return { ...prev, imageUrl: base64Image };
-                    }
-                    return prev;
-                });
-            }
+            setSelectedItem(prev => {
+                if (prev?.id === sectionId && prev.type === 'outline') {
+                    return { ...prev, imageUrl: base64Image };
+                }
+                return prev;
+            });
         } catch (error) {
             console.error(error);
-            setMessages(prev => [...prev, { role: 'model', text: `Sorry, I couldn't generate an illustration for ${section.title}. Please try again.` }]);
+            const errorMessage = error instanceof Error ? error.message : "An unknown error occurred.";
+            setMessages(prev => [...prev, { role: 'model', text: `Sorry, I couldn't generate an illustration for ${section.title}: ${errorMessage}` }]);
         } finally {
             setIsGeneratingIllustration(false);
         }
@@ -526,57 +530,62 @@ const WritingWorkspace: React.FC<WritingWorkspaceProps> = ({ project, onBack, on
         const userMessage: ChatMessage = { role: 'user', text: userInput };
         setMessages(prev => [...prev, userMessage]);
 
-        const newConversationHistory = [...conversationHistory, { role: 'user', parts: [{ text: userInput }] }];
+        const newConversationHistory = [...conversationHistory, { role: 'user', content: userInput }];
         setConversationHistory(newConversationHistory);
         
         try {
-            const response = await getGeminiResponse(newConversationHistory, currentProject, selectedItem);
+            const response = await aiService.getAIResponse(newConversationHistory, currentProject, selectedItem);
             
-            const functionCalls = response.functionCalls;
-            if (functionCalls && functionCalls.length > 0) {
-                // In a real app, you might handle multiple calls. For now, we process them sequentially.
-                let toolMessages: string[] = [];
-                for (const functionCall of functionCalls) {
-                    const { name, args } = functionCall;
-                    
-                    const toolFunctions: { [key: string]: (args: any) => void } = {
-                        addOutlineSection: handleAddOutlineSection,
-                        updateOutlineSection: handleUpdateOutlineSection,
-                        deleteOutlineSection: handleDeleteOutlineSection,
-                        moveOutlineSection: handleMoveOutlineSection,
-                        addCharacter: handleAddCharacter,
-                        updateCharacter: handleAiUpdateCharacter, // Use the wrapper
-                        deleteCharacter: handleDeleteCharacter,
-                    };
+            const toolCalls = response.toolCalls;
 
-                    if (toolFunctions[name]) {
-                        toolFunctions[name](args);
-                        toolMessages.push(`Executed: ${name}(${JSON.stringify(args).substring(0, 100)}...)`);
+            if (toolCalls && toolCalls.length > 0) {
+                let toolMessages: string[] = [];
+                 const toolFunctions: { [key: string]: (args: any) => void } = {
+                    addOutlineSection: handleAddOutlineSection,
+                    updateOutlineSection: handleUpdateOutlineSection,
+                    deleteOutlineSection: handleDeleteOutlineSection,
+                    moveOutlineSection: handleMoveOutlineSection,
+                    addCharacter: handleAddCharacter,
+                    updateCharacter: handleAiUpdateCharacter, // Use the wrapper
+                    deleteCharacter: handleDeleteCharacter,
+                };
+
+                // Add assistant message with tool calls to history
+                // The exact format for OpenAI history needs to match what the API expects for follow-up calls.
+                const historyToolCalls = toolCalls.map(tc => ({
+                    id: tc.id,
+                    type: 'function' as const,
+                    function: {
+                        name: tc.function.name,
+                        arguments: tc.function.arguments,
+                    }
+                }));
+
+                setConversationHistory(prev => [...prev, { role: 'assistant', tool_calls: historyToolCalls }]);
+                
+                for (const toolCall of toolCalls) {
+                    const functionName = toolCall.function.name;
+                    const functionArgs = JSON.parse(toolCall.function.arguments);
+
+                    if (toolFunctions[functionName]) {
+                        toolFunctions[functionName](functionArgs);
+                        toolMessages.push(`Executed: ${functionName}`);
                     } else {
-                        console.warn(`Unknown function call: ${name}`);
-                        toolMessages.push(`Error: AI tried to use an unknown tool '${name}'.`);
+                        console.warn(`Unknown function call: ${functionName}`);
+                        toolMessages.push(`Error: AI tried to use an unknown tool '${functionName}'.`);
                     }
                 }
                 
                 const toolResponseMessage: ChatMessage = { role: 'model', text: `(Action taken: ${toolMessages.join(', ')})` };
                 setMessages(prev => [...prev, toolResponseMessage]);
 
-                setConversationHistory(prev => [
-                    ...prev,
-                    { role: 'model', parts: [{ functionCalls }] },
-                ]);
-
+            } else if (response.text) {
+                const modelMessage: ChatMessage = { role: 'model', text: response.text };
+                setMessages(prev => [...prev, modelMessage]);
+                setConversationHistory(prev => [...prev, { role: 'assistant', content: response.text }]);
             } else {
-                const textResponse = response.text;
-                if (textResponse) {
-                    const modelMessage: ChatMessage = { role: 'model', text: textResponse };
-                    setMessages(prev => [...prev, modelMessage]);
-                    setConversationHistory(prev => [...prev, { role: 'model', parts: [{ text: textResponse }] }]);
-                } else {
-                    // Handle cases where there's no text and no function call
-                    const emptyResponseMessage: ChatMessage = { role: 'model', text: "(No text response from AI)" };
-                    setMessages(prev => [...prev, emptyResponseMessage]);
-                }
+                 const emptyResponseMessage: ChatMessage = { role: 'model', text: "(No text response from AI)" };
+                 setMessages(prev => [...prev, emptyResponseMessage]);
             }
         } catch (error) {
             const errorMessage = error instanceof Error ? error.message : "An unknown error occurred.";
@@ -616,10 +625,20 @@ const WritingWorkspace: React.FC<WritingWorkspaceProps> = ({ project, onBack, on
             onUpdateCharacter={handleUpdateCharacter}
             onUpdateNotes={handleUpdateNotes}
             onToggleCharacterAssociation={(sectionId, characterId) => {
-                setCurrentProject(prev => ({
-                    ...prev,
-                    outline: toggleCharacterAssociationRecursively(prev.outline, sectionId, characterId)
-                }))
+                setCurrentProject(prevProject => ({
+                    ...prevProject,
+                    outline: toggleCharacterAssociationRecursively(prevProject.outline, sectionId, characterId)
+                }));
+                setSelectedItem(prevSelectedItem => {
+                    if (prevSelectedItem?.id === sectionId && prevSelectedItem.type === 'outline') {
+                        const currentIds = prevSelectedItem.characterIds || [];
+                        const newIds = currentIds.includes(characterId)
+                            ? currentIds.filter(id => id !== characterId)
+                            : [...currentIds, characterId];
+                        return { ...prevSelectedItem, characterIds: newIds };
+                    }
+                    return prevSelectedItem;
+                });
             }}
             onConsistencyCheck={handleConsistencyCheck}
             onGenerateCharacterImage={handleGenerateCharacterImage}
