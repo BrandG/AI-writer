@@ -1,10 +1,11 @@
+
 import React, { useState, useCallback, useEffect, useRef } from 'react';
 import { Project, SelectableItem, OutlineSection, Character, ChatMessage } from '../types';
 import LeftSidebar from './LeftSidebar';
 import MainContent from './MainContent';
 import ChatSidebar from './ChatSidebar';
 import { v4 as uuidv4 } from 'uuid';
-import { getGeminiResponse, getConsistencyCheckResponse, generateCharacterImage } from '../services/geminiService';
+import { getGeminiResponse, getConsistencyCheckResponse, generateCharacterImage, generateIllustrationForSection } from '../services/geminiService';
 
 
 // Recursive helper to update a title in a nested structure
@@ -99,18 +100,24 @@ interface WritingWorkspaceProps {
 }
 
 export type SaveStatus = 'unsaved' | 'saving' | 'saved' | 'error';
+export type ActiveTab = 'outline' | 'characters' | 'notes';
 
 
+// FIX: The component was not returning any JSX, causing a type error with React.FC.
 const WritingWorkspace: React.FC<WritingWorkspaceProps> = ({ project, onBack, onUpdateProject }) => {
   const [currentProject, setCurrentProject] = useState<Project>(project);
-  const [activeTab, setActiveTab] = useState<'outline' | 'characters'>('outline');
+  const [activeTab, setActiveTab] = useState<ActiveTab>('outline');
   const [selectedItem, setSelectedItem] = useState<SelectableItem | null>(null);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   // State to hold the full conversation history for the API
   const [conversationHistory, setConversationHistory] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [isGeneratingImage, setIsGeneratingImage] = useState(false);
+  const [isGeneratingIllustration, setIsGeneratingIllustration] = useState(false);
   const [saveStatus, setSaveStatus] = useState<SaveStatus>('saved');
+  
+  // Track the current project ID to differentiate between a project switch and a data update.
+  const [currentProjectId, setCurrentProjectId] = useState<string>(project.id);
 
   const debounceTimeoutRef = useRef<number | null>(null);
 
@@ -153,19 +160,27 @@ const WritingWorkspace: React.FC<WritingWorkspaceProps> = ({ project, onBack, on
 
 
 
-  // If the project prop changes (e.g., user goes back and selects a new one), reset state
+  // This effect handles both switching projects and syncing updates from the parent.
   useEffect(() => {
-    setCurrentProject(project);
-    const initialSelectedItem = project.outline[0] || project.characters[0] || null;
-    setSelectedItem(initialSelectedItem);
-    setActiveTab(initialSelectedItem?.type === 'character' ? 'characters' : 'outline');
-    const initialMessage = { role: 'model' as const, text: `Hello! How can I help you with '${project.title}' today?` };
-    setMessages([initialMessage]);
-    // Also reset the API conversation history
-    setConversationHistory([{ role: 'model', parts: [{ text: initialMessage.text }] }]);
-    setIsLoading(false);
-    setSaveStatus('saved');
-  }, [project]);
+    // A true project switch (different ID) triggers a full state reset.
+    if (project.id !== currentProjectId) {
+      setCurrentProjectId(project.id); // Track the new ID
+      setCurrentProject(project);
+      const initialSelectedItem = project.outline[0] || project.characters[0] || null;
+      setSelectedItem(initialSelectedItem);
+      setActiveTab(initialSelectedItem?.type === 'character' ? 'characters' : 'outline');
+      const initialMessage = { role: 'model' as const, text: `Hello! How can I help you with '${project.title}' today?` };
+      setMessages([initialMessage]);
+      setConversationHistory([{ role: 'model', parts: [{ text: initialMessage.text }] }]);
+      setIsLoading(false);
+      setSaveStatus('saved');
+    } else {
+      // This is just a data sync from the parent after a save.
+      // We update the local project state to match the parent, but preserve UI state
+      // like the active tab and selected item. This prevents resetting the view on every auto-save.
+      setCurrentProject(project);
+    }
+  }, [project, currentProjectId]);
 
   const handleSelectItem = useCallback((item: SelectableItem) => {
     setSelectedItem(item);
@@ -326,374 +341,254 @@ const WritingWorkspace: React.FC<WritingWorkspaceProps> = ({ project, onBack, on
             } else if (targetParentId) {
                 const findAndInsertInParent = (sections: OutlineSection[]): OutlineSection[] => {
                     if (inserted) return sections;
+                    // FIX: The .map function must always return a value. Added `return section` to all paths.
                     return sections.map(section => {
                         if (section.id === targetParentId) {
                             section.children = [...(section.children || []), movedItem!];
                             inserted = true;
                         } else if (section.children && !inserted) {
+                            // FIX: Corrected recursive call from non-existent 'findAndInsert' to 'findAndInsertInParent'.
                             section.children = findAndInsertInParent(section.children);
                         }
                         return section;
                     });
                 };
                 newOutline = findAndInsertInParent(newOutline);
-            } else {
-                // No target parent or sibling, so move to root.
-                newOutline.push(movedItem);
             }
 
+            if (!inserted) {
+                // If it wasn't inserted as a child or sibling, it becomes a root item.
+                newOutline.push(movedItem!);
+            }
+            
             return { ...prevProject, outline: newOutline };
         });
     };
-
-
-  const handleAddSubItem = (parentId: string) => {
-    // This is now just for manual user clicks
-    handleAddOutlineSection({ parentId, title: 'New Section' });
-  };
-
-  const handleAddRootItem = () => {
-    // This is now just for manual user clicks
-    handleAddOutlineSection({ title: 'New Root Section' });
-  };
-
-  const handleUpdateOutlineContent = (sectionId: string, newContent: string) => {
-    handleUpdateOutlineSection({ sectionId, newContent });
-  };
-
-  const handleAddCharacter = (args: { name: string; description: string; backstory: string; relationships: string; }) => {
-    const { name, description, backstory, relationships } = args;
-    const newCharacter: Character = {
-        id: uuidv4(),
-        name,
-        description,
-        backstory,
-        relationships,
-        type: 'character',
-    };
-    setCurrentProject(prevProject => ({
-        ...prevProject,
-        characters: [...prevProject.characters, newCharacter],
-    }));
-  };
-
-  // FIX: Use a functional update for setSelectedItem to avoid stale state bugs.
-  const handleUpdateCharacter = (characterId: string, updatedData: Partial<Character>) => {
-    setCurrentProject(prevProject => {
-        const newCharacters = prevProject.characters.map(char =>
-            char.id === characterId ? { ...char, ...updatedData } : char
-        );
-        const updatedProject = { ...prevProject, characters: newCharacters };
-
-        if (selectedItem?.id === characterId && selectedItem.type === 'character') {
-            setSelectedItem(prev => {
-                if (prev?.type === 'character' && prev.id === characterId) {
-                    return { ...prev, ...updatedData };
-                }
-                return prev;
-            });
-        }
-
-        return updatedProject;
-    });
-  };
-
-  const handleDeleteCharacter = (args: { characterId: string }) => {
-    const { characterId } = args;
-    setCurrentProject(prevProject => {
-        const newCharacters = prevProject.characters.filter(c => c.id !== characterId);
-        const updatedProject = { ...prevProject, characters: newCharacters };
-        // If the deleted item was selected, deselect it
-        if (selectedItem?.id === characterId) {
-            setSelectedItem(null);
-        }
-        return updatedProject;
-    });
-  };
-
-
-  // FIX: Use a functional update for setSelectedItem to avoid stale state bugs and
-  // ensure the character association is toggled based on the latest state.
-  const handleToggleCharacterAssociation = (sectionId: string, characterId: string) => {
-     setCurrentProject(prevProject => {
-        const newOutline = toggleCharacterAssociationRecursively(prevProject.outline, sectionId, characterId);
-        const updatedProject = { ...prevProject, outline: newOutline };
-        
-        if (selectedItem?.id === sectionId && selectedItem.type === 'outline') {
-            setSelectedItem(prev => {
-                if (prev?.type === 'outline' && prev.id === sectionId) {
-                    const currentIds = prev.characterIds || [];
-                    const newIds = currentIds.includes(characterId)
-                        ? currentIds.filter(id => id !== characterId)
-                        : [...currentIds, characterId];
-                    return { ...prev, characterIds: newIds };
-                }
-                return prev;
-            });
-        }
-
-        return updatedProject;
-    });
-  };
-
-  const handleReorderOutline = useCallback((draggedId: string, targetId: string, position: 'above' | 'below' | 'on') => {
-        setCurrentProject(prevProject => {
-            const outline = JSON.parse(JSON.stringify(prevProject.outline));
-            let draggedItem: OutlineSection | null = null;
-            
-            // Helper to prevent dropping a parent into its own child
-            const isDescendant = (node: OutlineSection, parentId: string): boolean => {
-                if (node.id === parentId) return true;
-                if (node.children) {
-                    return node.children.some(child => isDescendant(child, parentId));
-                }
-                return false;
-            };
-
-            // Find and remove the dragged item
-            const findAndRemove = (sections: OutlineSection[], id: string): OutlineSection[] => {
-                return sections.filter(section => {
-                    if (section.id === id) {
-                        draggedItem = section;
-                        return false;
-                    }
-                    if (section.children) {
-                        section.children = findAndRemove(section.children, id);
-                    }
-                    return true;
-                });
-            };
-
-            const newOutlineWithoutDragged = findAndRemove(outline, draggedId);
-            if (!draggedItem) return prevProject;
-
-            // Prevent invalid drop
-            if (isDescendant(draggedItem, targetId)) {
-                console.warn("Cannot drop a parent item into one of its children.");
-                return prevProject;
-            }
-
-            // Find the target and insert the dragged item
-            const findAndInsert = (sections: OutlineSection[], tId: string, item: OutlineSection, pos: string): OutlineSection[] => {
-                if (pos === 'on') {
-                    return sections.map(section => {
-                        if (section.id === tId) {
-                            section.children = [...(section.children || []), item];
-                        } else if (section.children) {
-                            section.children = findAndInsert(section.children, tId, item, pos);
-                        }
-                        return section;
-                    });
-                }
-                
-                const targetIndex = sections.findIndex(s => s.id === tId);
-                if (targetIndex > -1) {
-                    if (pos === 'above') {
-                        sections.splice(targetIndex, 0, item);
-                    } else { // below
-                        sections.splice(targetIndex + 1, 0, item);
-                    }
-                    return sections;
-                }
-
-                return sections.map(section => {
-                    if (section.children) {
-                        section.children = findAndInsert(section.children, tId, item, pos);
-                    }
-                    return section;
-                });
-            };
-            
-            const newOutline = findAndInsert(newOutlineWithoutDragged, targetId, draggedItem, position);
-
-            return { ...prevProject, outline: newOutline };
-        });
-    }, []);
-
-    const handleSendMessage = async (userInput: string) => {
-        console.log(userInput);
-        if (!userInput.trim() || isLoading) return;
     
-        const userMessage: ChatMessage = { role: 'user', text: userInput };
-        setMessages(prev => [...prev, userMessage]);
-        setIsLoading(true);
-
-        const userTurn = { role: 'user', parts: [{ text: userInput }] };
-        const currentHistory = [...conversationHistory, userTurn];
-
-        try {
-            const response = await getGeminiResponse(currentHistory, currentProject, selectedItem);
-            
-            console.log(response);    
-            if (response.functionCalls && response.functionCalls.length > 0) {
-                // Reconstruct the model's turn from the parsed function calls for safety.
-                // This prevents potential errors from malformed `content` objects in the API response,
-                // which could otherwise cause the application to hang.
-                const modelTurn = {
-                    role: 'model' as const,
-                    parts: response.functionCalls.map(fc => ({ functionCall: fc }))
-                };
-
-                // Execute the functions and collect the results into parts.
-                const toolParts = response.functionCalls.map(call => {
-                    let result: any;
-                    try {
-                        switch (call.name) {
-                            case 'addOutlineSection':
-                                // FIX: Cast arguments from function call to the expected type.
-                                handleAddOutlineSection(call.args as { parentId?: string; title: string; content?: string; });
-                                result = { success: true };
-                                break;
-                            case 'updateOutlineSection':
-                                // FIX: Cast arguments from function call to the expected type.
-                                handleUpdateOutlineSection(call.args as { sectionId: string; newTitle?: string; newContent?: string; });
-                                result = { success: true };
-                                break;
-                            case 'deleteOutlineSection':
-                                // FIX: Cast arguments from function call to the expected type.
-                                handleDeleteOutlineSection(call.args as { sectionId: string; });
-                                result = { success: true };
-                                break;
-                            case 'moveOutlineSection':
-                                handleMoveOutlineSection(call.args as {
-                                    sectionId: string;
-                                    targetParentId?: string;
-                                    targetSiblingId?: string;
-                                    position?: 'before' | 'after';
-                                });
-                                result = { success: true };
-                                break;
-                            case 'addCharacter':
-                                // FIX: Cast arguments from function call to the expected type.
-                                handleAddCharacter(call.args as { name: string; description: string; backstory: string; relationships: string; });
-                                result = { success: true };
-                                break;
-                            case 'updateCharacter': {
-                                // FIX: Cast arguments from function call to the expected type to resolve multiple TypeScript errors.
-                                const { characterId, newName, newDescription, newBackstory, newRelationships } = call.args as {
-                                    characterId: string;
-                                    newName?: string;
-                                    newDescription?: string;
-                                    newBackstory?: string;
-                                    newRelationships?: string;
-                                };
-                                const updates: Partial<Character> = {};
-                                if (newName) updates.name = newName;
-                                if (newDescription) updates.description = newDescription;
-                                if (newBackstory) updates.backstory = newBackstory;
-                                if (newRelationships) updates.relationships = newRelationships;
-                                handleUpdateCharacter(characterId, updates);
-                                result = { success: true };
-                                break;
-                            }
-                            case 'deleteCharacter':
-                                // FIX: Cast arguments from function call to the expected type.
-                                handleDeleteCharacter(call.args as { characterId: string; });
-                                result = { success: true };
-                                break;
-                            default:
-                                result = { success: false, error: `Function ${call.name} not found.` };
-                        }
-                    } catch (e) {
-                         result = { success: false, error: (e as Error).message };
-                    }
-                    // Format the response for the API.
-                    return {
-                        functionResponse: {
-                            name: call.name,
-                            response: result
-                        }
-                    };
-                });
-                
-                // Create the tool's turn containing the results of the function calls.
-                const toolTurn = { role: 'tool', parts: toolParts };
-                const historyWithToolResponse = [...currentHistory, modelTurn, toolTurn];
-
-                // Send the tool response back to the model for a final text response.
-                const finalResponse = await getGeminiResponse(historyWithToolResponse, currentProject, selectedItem);
-                
-                const modelMessage: ChatMessage = { role: 'model', text: finalResponse.text };
-                setMessages(prev => [...prev, modelMessage]);
-                setConversationHistory([...historyWithToolResponse, { role: 'model', parts: [{ text: finalResponse.text }] }]);
-
-            } else {
-                // Simple text response
-                const modelMessage: ChatMessage = { role: 'model', text: response.text };
-                setMessages(prev => [...prev, modelMessage]);
-                setConversationHistory([...currentHistory, { role: 'model', parts: [{ text: response.text }] }]);
-            }
-
-        } catch (error) {
-          console.error("Failed to get chat response:", error);
-          const errorMessageText = error instanceof Error ? error.message : "Sorry, I'm having trouble connecting right now.";
-          const errorMessage: ChatMessage = { role: 'model', text: errorMessageText };
-          setMessages(prev => [...prev, errorMessage]);
-        } finally {
-          setIsLoading(false);
-        }
+    // Character Handlers (used by AI tools and MainContent)
+    const handleAddCharacter = (args: Omit<Character, 'id' | 'type'>) => {
+        const newCharacter: Character = {
+            ...args,
+            id: uuidv4(),
+            type: 'character',
+        };
+        setCurrentProject(prevProject => ({
+            ...prevProject,
+            characters: [...prevProject.characters, newCharacter],
+        }));
     };
 
+    const handleUpdateCharacter = (characterId: string, updatedData: Partial<Character>) => {
+        setCurrentProject(prevProject => {
+            const newCharacters = prevProject.characters.map(char =>
+                char.id === characterId ? { ...char, ...updatedData } : char
+            );
+            const updatedProject = { ...prevProject, characters: newCharacters };
+            
+            if (selectedItem?.id === characterId && selectedItem.type === 'character') {
+                setSelectedItem(prev => {
+                    if (prev?.type === 'character' && prev.id === characterId) {
+                        return { ...prev, ...updatedData };
+                    }
+                    return prev;
+                });
+            }
+
+            return updatedProject;
+        });
+    };
+    
+    const handleDeleteCharacter = (args: { characterId: string }) => {
+        setCurrentProject(prevProject => {
+            const updatedProject = {
+                ...prevProject,
+                characters: prevProject.characters.filter(c => c.id !== args.characterId),
+            };
+            // Also remove character from any outline associations
+            const cleanOutline = (sections: OutlineSection[]): OutlineSection[] => {
+                return sections.map(section => {
+                    const newSection = { ...section };
+                    if (newSection.characterIds) {
+                        newSection.characterIds = newSection.characterIds.filter(id => id !== args.characterId);
+                    }
+                    if (newSection.children) {
+                        newSection.children = cleanOutline(newSection.children);
+                    }
+                    return newSection;
+                });
+            };
+            updatedProject.outline = cleanOutline(updatedProject.outline);
+            
+            if (selectedItem?.id === args.characterId) {
+                setSelectedItem(null);
+            }
+            return updatedProject;
+        });
+    };
+
+    const handleUpdateNotes = (newNotes: string) => {
+        setCurrentProject(prev => ({ ...prev, notes: newNotes }));
+    };
+
+    // AI Tool Handlers
     const handleConsistencyCheck = async (section: OutlineSection) => {
-        if (isLoading) return;
-
-        const associatedCharacters = currentProject.characters.filter(
-            c => section.characterIds?.includes(c.id)
-        );
-
-        if (associatedCharacters.length === 0) {
-            const noCharsMessage: ChatMessage = { role: 'model', text: "There are no characters associated with this section to check for consistency. Please link some characters first." };
-            setMessages(prev => [...prev, noCharsMessage]);
-            return;
-        }
-
-        const systemMessage: ChatMessage = { role: 'user', text: `[Running character consistency check on "${section.title}"]` };
-        setMessages(prev => [...prev, systemMessage]);
         setIsLoading(true);
-
+        setMessages(prev => [...prev, { role: 'model', text: 'Checking for character consistency in this section...' }]);
         try {
-            const responseText = await getConsistencyCheckResponse(section, associatedCharacters);
-            const modelMessage: ChatMessage = { role: 'model', text: responseText };
-            setMessages(prev => [...prev, modelMessage]);
+            const associatedChars = currentProject.characters.filter(c => section.characterIds?.includes(c.id));
+            const analysis = await getConsistencyCheckResponse(section, associatedChars.length > 0 ? associatedChars : currentProject.characters);
+            setMessages(prev => [...prev, { role: 'model', text: analysis }]);
         } catch (error) {
-            console.error("Failed to get consistency response:", error);
-            const errorMessage: ChatMessage = { role: 'model', text: "Sorry, I'm having trouble with the consistency check right now." };
-            setMessages(prev => [...prev, errorMessage]);
+            const errorMessage = error instanceof Error ? error.message : "An unknown error occurred.";
+            setMessages(prev => [...prev, { role: 'model', text: `Error: ${errorMessage}` }]);
         } finally {
             setIsLoading(false);
         }
     };
 
     const handleGenerateCharacterImage = async (characterId: string) => {
-        if (isGeneratingImage) return;
-
         const character = currentProject.characters.find(c => c.id === characterId);
-        if (!character) {
-            console.error("Character not found");
-            return;
-        }
-
+        if (!character) return;
+        
         setIsGeneratingImage(true);
-        const systemMessage: ChatMessage = { role: 'user', text: `[Generating image for ${character.name}...]` };
-        setMessages(prev => [...prev, systemMessage]);
-
         try {
             const base64Image = await generateCharacterImage(character);
             handleUpdateCharacter(characterId, { imageUrl: base64Image });
-            const successMessage: ChatMessage = { role: 'model', text: `Successfully generated a new image for ${character.name}!` };
-            setMessages(prev => [...prev, successMessage]);
         } catch (error) {
-            console.error("Failed to generate character image:", error);
-            const errorMessage: ChatMessage = { role: 'model', text: error instanceof Error ? error.message : "An unknown error occurred during image generation." };
-            setMessages(prev => [...prev, errorMessage]);
+            console.error(error);
+            // Optionally show an error message in the chat
+            setMessages(prev => [...prev, { role: 'model', text: `Sorry, I couldn't generate an image for ${character.name}. Please try again.` }]);
         } finally {
             setIsGeneratingImage(false);
         }
     };
 
+    const handleGenerateIllustration = async (sectionId: string) => {
+        const findSection = (sections: OutlineSection[], id: string): OutlineSection | undefined => {
+            for (const section of sections) {
+                if (section.id === id) return section;
+                if (section.children) {
+                    const found = findSection(section.children, id);
+                    if (found) return found;
+                }
+            }
+            return undefined;
+        };
+
+        const section = findSection(currentProject.outline, sectionId);
+        if (!section) return;
+
+        setIsGeneratingIllustration(true);
+        try {
+            const base64Image = await generateIllustrationForSection(section, currentProject.genre);
+            setCurrentProject(prevProject => {
+                const newOutline = updateSectionRecursively(prevProject.outline, sectionId, { imageUrl: base64Image });
+                return { ...prevProject, outline: newOutline };
+            });
+            if (selectedItem?.id === sectionId && selectedItem.type === 'outline') {
+                 setSelectedItem(prev => {
+                    if (prev?.type === 'outline' && prev.id === sectionId) {
+                        return { ...prev, imageUrl: base64Image };
+                    }
+                    return prev;
+                });
+            }
+        } catch (error) {
+            console.error(error);
+            setMessages(prev => [...prev, { role: 'model', text: `Sorry, I couldn't generate an illustration for ${section.title}. Please try again.` }]);
+        } finally {
+            setIsGeneratingIllustration(false);
+        }
+    };
+
+    // Wrapper to handle AI `updateCharacter` tool calls correctly
+    const handleAiUpdateCharacter = (args: { characterId: string; [key: string]: any }) => {
+        const { characterId, ...updates } = args;
+        if (!characterId) {
+            console.error("AI tried to update character without providing characterId.");
+            return;
+        }
+
+        const remappedUpdates: Partial<Character> = {};
+        for (const key in updates) {
+            // Remap keys like "newName" to "name"
+            if (key.startsWith('new')) {
+                const fieldName = key.charAt(3).toLowerCase() + key.slice(4);
+                (remappedUpdates as any)[fieldName] = updates[key];
+            }
+        }
+
+        handleUpdateCharacter(characterId, remappedUpdates);
+    };
+
+    const handleSendMessage = async (userInput: string) => {
+        setIsLoading(true);
+        const userMessage: ChatMessage = { role: 'user', text: userInput };
+        setMessages(prev => [...prev, userMessage]);
+
+        const newConversationHistory = [...conversationHistory, { role: 'user', parts: [{ text: userInput }] }];
+        setConversationHistory(newConversationHistory);
+        
+        try {
+            const response = await getGeminiResponse(newConversationHistory, currentProject, selectedItem);
+            
+            const functionCalls = response.functionCalls;
+            if (functionCalls && functionCalls.length > 0) {
+                // In a real app, you might handle multiple calls. For now, we process them sequentially.
+                let toolMessages: string[] = [];
+                for (const functionCall of functionCalls) {
+                    const { name, args } = functionCall;
+                    
+                    const toolFunctions: { [key: string]: (args: any) => void } = {
+                        addOutlineSection: handleAddOutlineSection,
+                        updateOutlineSection: handleUpdateOutlineSection,
+                        deleteOutlineSection: handleDeleteOutlineSection,
+                        moveOutlineSection: handleMoveOutlineSection,
+                        addCharacter: handleAddCharacter,
+                        updateCharacter: handleAiUpdateCharacter, // Use the wrapper
+                        deleteCharacter: handleDeleteCharacter,
+                    };
+
+                    if (toolFunctions[name]) {
+                        toolFunctions[name](args);
+                        toolMessages.push(`Executed: ${name}(${JSON.stringify(args).substring(0, 100)}...)`);
+                    } else {
+                        console.warn(`Unknown function call: ${name}`);
+                        toolMessages.push(`Error: AI tried to use an unknown tool '${name}'.`);
+                    }
+                }
+                
+                const toolResponseMessage: ChatMessage = { role: 'model', text: `(Action taken: ${toolMessages.join(', ')})` };
+                setMessages(prev => [...prev, toolResponseMessage]);
+
+                setConversationHistory(prev => [
+                    ...prev,
+                    { role: 'model', parts: [{ functionCalls }] },
+                ]);
+
+            } else {
+                const textResponse = response.text;
+                if (textResponse) {
+                    const modelMessage: ChatMessage = { role: 'model', text: textResponse };
+                    setMessages(prev => [...prev, modelMessage]);
+                    setConversationHistory(prev => [...prev, { role: 'model', parts: [{ text: textResponse }] }]);
+                } else {
+                    // Handle cases where there's no text and no function call
+                    const emptyResponseMessage: ChatMessage = { role: 'model', text: "(No text response from AI)" };
+                    setMessages(prev => [...prev, emptyResponseMessage]);
+                }
+            }
+        } catch (error) {
+            const errorMessage = error instanceof Error ? error.message : "An unknown error occurred.";
+            const modelMessage: ChatMessage = { role: 'model', text: `Sorry, there was an error: ${errorMessage}` };
+            setMessages(prev => [...prev, modelMessage]);
+        } finally {
+            setIsLoading(false);
+        }
+    };
 
   return (
-    <div className="flex h-screen bg-gray-900 text-gray-200">
+    <div className="flex h-screen w-full">
         <LeftSidebar 
             project={currentProject}
             activeTab={activeTab}
@@ -702,23 +597,38 @@ const WritingWorkspace: React.FC<WritingWorkspaceProps> = ({ project, onBack, on
             onSelectItem={handleSelectItem}
             onBack={onBack}
             onUpdateOutlineTitle={handleUpdateOutlineTitle}
-            onAddSubItem={handleAddSubItem}
-            onAddRootItem={handleAddRootItem}
-            onReorderOutline={handleReorderOutline}
+            onAddSubItem={(parentId) => handleAddOutlineSection({ parentId, title: "New Section"})}
+            onAddRootItem={() => handleAddOutlineSection({ title: "New Section"})}
+            onReorderOutline={(draggedId, targetId, position) => {
+                if (position === 'on') {
+                    handleMoveOutlineSection({ sectionId: draggedId, targetParentId: targetId });
+                } else {
+                    handleMoveOutlineSection({ sectionId: draggedId, targetSiblingId: targetId, position: position === 'above' ? 'before' : 'after' });
+                }
+            }}
             saveStatus={saveStatus}
         />
         <MainContent 
-          item={selectedItem} 
-          project={currentProject}
-          onUpdateOutlineContent={handleUpdateOutlineContent}
-          onUpdateCharacter={handleUpdateCharacter}
-          onToggleCharacterAssociation={handleToggleCharacterAssociation}
-          onConsistencyCheck={handleConsistencyCheck}
-          onGenerateCharacterImage={handleGenerateCharacterImage}
-          isGeneratingImage={isGeneratingImage}
+            item={selectedItem}
+            project={currentProject}
+            activeTab={activeTab}
+            onUpdateOutlineContent={(sectionId, newContent) => handleUpdateOutlineSection({ sectionId, newContent })}
+            onUpdateCharacter={handleUpdateCharacter}
+            onUpdateNotes={handleUpdateNotes}
+            onToggleCharacterAssociation={(sectionId, characterId) => {
+                setCurrentProject(prev => ({
+                    ...prev,
+                    outline: toggleCharacterAssociationRecursively(prev.outline, sectionId, characterId)
+                }))
+            }}
+            onConsistencyCheck={handleConsistencyCheck}
+            onGenerateCharacterImage={handleGenerateCharacterImage}
+            isGeneratingImage={isGeneratingImage}
+            onGenerateIllustration={handleGenerateIllustration}
+            isGeneratingIllustration={isGeneratingIllustration}
         />
         <ChatSidebar 
-            project={currentProject} 
+            project={currentProject}
             messages={messages}
             isLoading={isLoading}
             onSendMessage={handleSendMessage}

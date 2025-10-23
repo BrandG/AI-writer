@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import { Project } from '../types';
 
 interface ProjectSelectionPageProps {
@@ -7,6 +7,7 @@ interface ProjectSelectionPageProps {
   onDeleteProject: (projectId: string) => void;
   onUpdateProjectTitle: (projectId: string, newTitle: string) => void;
   onAddProject: (data: { title: string; genre: string; description: string; }) => Promise<void>;
+  onImportProjects: (projects: Project[]) => Promise<void>;
 }
 
 const TrashIcon: React.FC<{ className?: string }> = ({ className }) => (
@@ -202,9 +203,44 @@ const AddProjectModal: React.FC<{
     );
 };
 
-const ProjectSelectionPage: React.FC<ProjectSelectionPageProps> = ({ savedProjects, onSelectProject, onDeleteProject, onUpdateProjectTitle, onAddProject }) => {
+const ConfirmDeleteModal: React.FC<{
+    isOpen: boolean;
+    onClose: () => void;
+    onConfirm: () => void;
+    projectName: string;
+}> = ({ isOpen, onClose, onConfirm, projectName }) => {
+    if (!isOpen) return null;
+
+    return (
+        <div
+            className="fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center z-50"
+            aria-modal="true"
+            role="dialog"
+            onClick={onClose}
+        >
+            <div
+                className="bg-gray-800 rounded-lg shadow-xl p-8 max-w-md w-full"
+                onClick={(e) => e.stopPropagation()}
+            >
+                <h2 className="text-2xl font-bold mb-4 text-red-400">Confirm Deletion</h2>
+                <p className="text-gray-300 mb-6">
+                    Are you sure you want to permanently delete the project <strong className="font-semibold text-white">"{projectName}"</strong>? This action cannot be undone.
+                </p>
+                <div className="flex justify-end gap-4">
+                    <button type="button" onClick={onClose} className="px-4 py-2 rounded-md text-gray-300 bg-gray-600 hover:bg-gray-500 transition-colors">Cancel</button>
+                    <button type="button" onClick={onConfirm} className="px-4 py-2 rounded-md font-semibold text-white bg-red-600 hover:bg-red-500 transition-colors">Delete Project</button>
+                </div>
+            </div>
+        </div>
+    );
+};
+
+
+const ProjectSelectionPage: React.FC<ProjectSelectionPageProps> = ({ savedProjects, onSelectProject, onDeleteProject, onUpdateProjectTitle, onAddProject, onImportProjects }) => {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isCreating, setIsCreating] = useState(false);
+  const [projectToDelete, setProjectToDelete] = useState<Project | null>(null);
+  const importInputRef = useRef<HTMLInputElement>(null);
 
   const handleCreateProject = async (data: { title: string; genre: string; description: string; }) => {
     setIsCreating(true);
@@ -219,7 +255,73 @@ const ProjectSelectionPage: React.FC<ProjectSelectionPageProps> = ({ savedProjec
         setIsCreating(false);
     }
   };
+
+  const handleExportClick = () => {
+    if (savedProjects.length === 0) {
+        alert("There are no projects to export.");
+        return;
+    }
+    const dataStr = JSON.stringify(savedProjects, null, 2);
+    const dataBlob = new Blob([dataStr], { type: "application/json" });
+    const url = URL.createObjectURL(dataBlob);
+    const link = document.createElement('a');
+    const timestamp = new Date().toISOString().replace(/:/g, '-').slice(0, 19);
+    link.download = `ai-writing-assistant-backup-${timestamp}.json`;
+    link.href = url;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+  };
+
+  const handleImportClick = () => {
+    importInputRef.current?.click();
+  };
   
+  const handleFileSelect = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = async (e) => {
+        try {
+            const text = e.target?.result;
+            if (typeof text !== 'string') {
+                throw new Error("File content is not readable text.");
+            }
+            const data = JSON.parse(text);
+
+            // Basic validation
+            if (!Array.isArray(data) || data.some(item => typeof item.id !== 'string' || typeof item.title !== 'string')) {
+                throw new Error("Invalid file format. The file should be an array of projects.");
+            }
+            
+            await onImportProjects(data);
+
+        } catch (error) {
+            const errorMessage = error instanceof Error ? error.message : "An unknown error occurred.";
+            console.error("Import failed:", error);
+            alert(`Error importing projects:\n${errorMessage}`);
+        } finally {
+            // Reset the input value to allow importing the same file again
+            if (importInputRef.current) {
+                importInputRef.current.value = '';
+            }
+        }
+    };
+    reader.onerror = () => {
+        alert("Failed to read the file.");
+    };
+    reader.readAsText(file);
+  };
+  
+  const handleConfirmDelete = () => {
+    if (projectToDelete) {
+        onDeleteProject(projectToDelete.id);
+        setProjectToDelete(null); // Close modal after action
+    }
+  };
+
   return (
     <div className="container mx-auto p-8">
       <AddProjectModal 
@@ -228,6 +330,20 @@ const ProjectSelectionPage: React.FC<ProjectSelectionPageProps> = ({ savedProjec
         onAddProject={handleCreateProject}
         isCreating={isCreating}
       />
+      <ConfirmDeleteModal
+        isOpen={!!projectToDelete}
+        onClose={() => setProjectToDelete(null)}
+        onConfirm={handleConfirmDelete}
+        projectName={projectToDelete?.title || ''}
+      />
+      <input
+        type="file"
+        ref={importInputRef}
+        onChange={handleFileSelect}
+        accept=".json,application/json"
+        className="hidden"
+        aria-hidden="true"
+      />
       
       <header className="text-center mb-12">
         <h1 className="text-5xl font-extrabold text-white mb-2">AI Writing Assistant</h1>
@@ -235,17 +351,31 @@ const ProjectSelectionPage: React.FC<ProjectSelectionPageProps> = ({ savedProjec
       </header>
 
       <section>
-        <div className="flex justify-between items-center mb-6 border-b border-gray-700 pb-3">
+        <div className="flex justify-between items-center mb-6 border-b border-gray-700 pb-3 flex-wrap gap-4">
           <h2 className="text-3xl font-bold text-white">Your Projects</h2>
-          <button
-              onClick={() => setIsModalOpen(true)}
-              className="bg-cyan-600 text-white font-bold py-2 px-4 rounded-md hover:bg-cyan-500 transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-cyan-400 focus:ring-opacity-75 flex items-center"
-          >
-              <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 mr-2" viewBox="0 0 20 20" fill="currentColor">
-                  <path fillRule="evenodd" d="M10 3a1 1 0 011 1v5h5a1 1 0 110 2h-5v5a1 1 0 11-2 0v-5H4a1 1 0 110-2h5V4a1 1 0 011-1z" clipRule="evenodd" />
-              </svg>
-              New Project
-          </button>
+          <div className="flex items-center gap-3">
+            <button
+                onClick={handleImportClick}
+                className="bg-gray-700 text-white font-bold py-2 px-4 rounded-md hover:bg-gray-600 transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-cyan-400 focus:ring-opacity-75"
+            >
+                Import
+            </button>
+             <button
+                onClick={handleExportClick}
+                className="bg-gray-700 text-white font-bold py-2 px-4 rounded-md hover:bg-gray-600 transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-cyan-400 focus:ring-opacity-75"
+            >
+                Export All
+            </button>
+            <button
+                onClick={() => setIsModalOpen(true)}
+                className="bg-cyan-600 text-white font-bold py-2 px-4 rounded-md hover:bg-cyan-500 transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-cyan-400 focus:ring-opacity-75 flex items-center"
+            >
+                <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 mr-2" viewBox="0 0 20 20" fill="currentColor">
+                    <path fillRule="evenodd" d="M10 3a1 1 0 011 1v5h5a1 1 0 110 2h-5v5a1 1 0 11-2 0v-5H4a1 1 0 110-2h5V4a1 1 0 011-1z" clipRule="evenodd" />
+                </svg>
+                New Project
+            </button>
+          </div>
         </div>
         {savedProjects.length > 0 ? (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
@@ -254,7 +384,7 @@ const ProjectSelectionPage: React.FC<ProjectSelectionPageProps> = ({ savedProjec
                 key={project.id} 
                 project={project} 
                 onSelect={() => onSelectProject(project)} 
-                onDelete={() => onDeleteProject(project.id)}
+                onDelete={() => setProjectToDelete(project)}
                 onUpdateTitle={(newTitle) => onUpdateProjectTitle(project.id, newTitle)}
               />
             ))}

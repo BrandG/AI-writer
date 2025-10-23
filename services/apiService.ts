@@ -18,6 +18,17 @@ export const getAllProjects = async (): Promise<Project[]> => {
     });
 };
 
+export const setAllProjects = async (projects: Project[]): Promise<void> => {
+    console.log("API: Setting all projects...");
+    return new Promise(resolve => {
+        setTimeout(() => {
+            saveProjects(projects);
+            console.log("API: All projects saved.");
+            resolve();
+        }, API_LATENCY);
+    });
+};
+
 export const createProject = async (project: Project): Promise<Project> => {
     console.log("API: Creating new project...", project);
     return new Promise((resolve, reject) => {
@@ -48,7 +59,6 @@ export const updateProject = async (updatedProject: Project): Promise<Project> =
             const updatedProjects = [...projects];
             updatedProjects[projectIndex] = updatedProject;
             saveProjects(updatedProjects);
-            console.log("API: Project updated.", updatedProject);
             resolve(updatedProject);
         }, API_LATENCY);
     });

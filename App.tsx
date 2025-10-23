@@ -1,10 +1,11 @@
+
 import React, { useState, useEffect, useCallback } from 'react';
 import { Project } from './types';
 import ProjectSelectionPage from './components/ProjectSelectionPage';
 import WritingWorkspace from './components/WritingWorkspace';
 import { v4 as uuidv4 } from 'uuid';
 import { generateInitialProjectData } from './services/geminiService';
-import { getAllProjects, createProject as createProjectApi, updateProject as updateProjectApi, deleteProject as deleteProjectApi } from './services/apiService';
+import { getAllProjects, createProject as createProjectApi, updateProject as updateProjectApi, deleteProject as deleteProjectApi, setAllProjects } from './services/apiService';
 
 const App: React.FC = () => {
   const [projects, setProjects] = useState<Project[]>([]);
@@ -39,7 +40,7 @@ const App: React.FC = () => {
 
   const handleAddProject = useCallback(async (data: { title: string; genre: string; description: string; }) => {
     try {
-      const { outline, characters } = await generateInitialProjectData(data.title, data.genre, data.description);
+      const { outline, characters, notes } = await generateInitialProjectData(data.title, data.genre, data.description);
       
       const newProject: Project = {
         id: uuidv4(),
@@ -48,6 +49,7 @@ const App: React.FC = () => {
         description: data.description,
         outline: outline,
         characters: characters,
+        notes: notes,
       };
 
       const savedProject = await createProjectApi(newProject);
@@ -80,14 +82,12 @@ const App: React.FC = () => {
   }, [selectedProject?.id]);
   
   const handleDeleteProject = useCallback(async (projectId: string) => {
-    if (window.confirm("Are you sure you want to delete this project? This action cannot be undone.")) {
-        try {
-            await deleteProjectApi(projectId);
-            setProjects(prevProjects => prevProjects.filter(p => p.id !== projectId));
-        } catch (error) {
-            console.error("Failed to delete project:", error);
-            alert("Error: Could not delete project from the database.");
-        }
+    try {
+        await deleteProjectApi(projectId);
+        setProjects(prevProjects => prevProjects.filter(p => p.id !== projectId));
+    } catch (error) {
+        console.error("Failed to delete project:", error);
+        alert("Error: Could not delete project from the database.");
     }
   }, []);
 
@@ -98,6 +98,25 @@ const App: React.FC = () => {
       await handleUpdateProject(updatedProject);
     }
   }, [projects, handleUpdateProject]);
+
+  const handleImportProjects = useCallback(async (importedProjects: Project[]) => {
+    const currentProjectIds = new Set(projects.map(p => p.id));
+    
+    // Check for ID conflicts and generate new IDs if necessary
+    const sanitizedProjects = importedProjects.map(p => {
+        if (currentProjectIds.has(p.id)) {
+            console.warn(`Project ID conflict found for "${p.title}". Assigning a new ID.`);
+            return { ...p, id: uuidv4() };
+        }
+        return p;
+    });
+
+    const mergedProjects = [...projects, ...sanitizedProjects];
+    await setAllProjects(mergedProjects); // Use the new API to save all at once
+    setProjects(mergedProjects); // Update state to reflect imported projects
+    alert(`Successfully imported ${sanitizedProjects.length} project(s).`);
+  }, [projects]);
+
 
   const handleGoBack = () => {
     setSelectedProject(null);
@@ -137,6 +156,7 @@ const App: React.FC = () => {
           onDeleteProject={handleDeleteProject}
           onUpdateProjectTitle={handleUpdateProjectTitle}
           onAddProject={handleAddProject}
+          onImportProjects={handleImportProjects}
         />
       )}
     </div>

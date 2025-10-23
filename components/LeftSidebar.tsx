@@ -1,12 +1,13 @@
+
 import React, { useState, useEffect } from 'react';
 import { Project, SelectableItem, OutlineSection } from '../types';
-import { SaveStatus } from './WritingWorkspace';
+import { SaveStatus, ActiveTab } from './WritingWorkspace';
 import StatusIndicator from './StatusIndicator';
 
 interface LeftSidebarProps {
   project: Project;
-  activeTab: 'outline' | 'characters';
-  setActiveTab: (tab: 'outline' | 'characters') => void;
+  activeTab: ActiveTab;
+  setActiveTab: (tab: ActiveTab) => void;
   selectedItem: SelectableItem | null;
   onSelectItem: (item: SelectableItem) => void;
   onBack: () => void;
@@ -32,6 +33,24 @@ const PlusIcon: React.FC<{className?: string}> = ({ className }) => (
 const ChevronDownIcon: React.FC<{className?: string}> = ({ className }) => (
     <svg xmlns="http://www.w3.org/2000/svg" className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor">
         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+    </svg>
+);
+
+const ListBulletIcon: React.FC<{className?: string}> = ({ className }) => (
+    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className={className}>
+      <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 6.75h16.5M3.75 12h16.5m-16.5 5.25h16.5" />
+    </svg>
+);
+
+const UsersIcon: React.FC<{className?: string}> = ({ className }) => (
+    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className={className}>
+      <path strokeLinecap="round" strokeLinejoin="round" d="M15 19.128a9.38 9.38 0 0 0 2.625.372 9.337 9.337 0 0 0 4.121-.952 4.125 4.125 0 0 0-7.533-2.493M15 19.128v-.003c0-1.113-.285-2.16-.786-3.07M15 19.128v.106A12.318 12.318 0 0 1 8.624 21c-2.331 0-4.512-.645-6.374-1.766l-.001-.109a6.375 6.375 0 0 1 11.964-4.663M12 12.375a3.375 3.375 0 1 1-6.75 0 3.375 3.375 0 0 1 6.75 0Z" />
+    </svg>
+);
+
+const DocumentTextIcon: React.FC<{className?: string}> = ({ className }) => (
+    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className={className}>
+      <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 0 0-3.375-3.375h-1.5A1.125 1.125 0 0 1 13.5 7.125v-1.5a3.375 3.375 0 0 0-3.375-3.375H8.25m2.25 0H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 0 0-9-9Z" />
     </svg>
 );
 
@@ -215,6 +234,12 @@ const LeftSidebar: React.FC<LeftSidebarProps> = ({ project, activeTab, setActive
   const [draggedItemId, setDraggedItemId] = useState<string | null>(null);
   const [dragOverInfo, setDragOverInfo] = useState<DragOverInfo | null>(null);
 
+  const navItems = [
+    { id: 'outline', label: 'Outline', icon: <ListBulletIcon className="h-6 w-6" /> },
+    { id: 'characters', label: 'Characters', icon: <UsersIcon className="h-6 w-6" /> },
+    { id: 'notes', label: 'Notes', icon: <DocumentTextIcon className="h-6 w-6" /> },
+  ];
+
   return (
     <aside className="w-1/4 max-w-xs bg-gray-800 flex flex-col p-4 border-r border-gray-700">
       <header className="mb-4">
@@ -227,25 +252,22 @@ const LeftSidebar: React.FC<LeftSidebarProps> = ({ project, activeTab, setActive
         <StatusIndicator status={saveStatus} />
       </header>
 
-      <div className="flex border-b border-gray-700 mb-4">
-        <button
-          className={`flex-1 py-2 text-center font-semibold transition-colors duration-200 ${activeTab === 'outline' ? 'text-cyan-400 border-b-2 border-cyan-400' : 'text-gray-400 hover:text-white'}`}
-          onClick={() => setActiveTab('outline')}
-          aria-pressed={activeTab === 'outline'}
-        >
-          Outline
-        </button>
-        <button
-          className={`flex-1 py-2 text-center font-semibold transition-colors duration-200 ${activeTab === 'characters' ? 'text-cyan-400 border-b-2 border-cyan-400' : 'text-gray-400 hover:text-white'}`}
-          onClick={() => setActiveTab('characters')}
-          aria-pressed={activeTab === 'characters'}
-        >
-          Characters
-        </button>
-      </div>
+      <nav className="flex justify-around items-center border-b border-gray-700 mb-4 p-1 bg-gray-900/50 rounded-lg">
+        {navItems.map(navItem => (
+            <button
+                key={navItem.id}
+                onClick={() => setActiveTab(navItem.id as ActiveTab)}
+                aria-pressed={activeTab === navItem.id}
+                title={navItem.label}
+                className={`p-2 rounded-md transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-cyan-500 ${activeTab === navItem.id ? 'bg-cyan-600/20 text-cyan-300' : 'text-gray-400 hover:bg-gray-700 hover:text-white'}`}
+            >
+                {navItem.icon}
+            </button>
+        ))}
+      </nav>
 
-      <nav className="flex-grow overflow-y-auto pr-2">
-        {activeTab === 'outline' ? (
+      <div className="flex-grow overflow-y-auto pr-2">
+        {activeTab === 'outline' && (
              <>
                 <div className="px-1 mb-2">
                     <button
@@ -276,7 +298,8 @@ const LeftSidebar: React.FC<LeftSidebarProps> = ({ project, activeTab, setActive
                     ))}
                 </ul>
             </>
-        ) : (
+        )}
+        {activeTab === 'characters' && (
              <ul>
                 {project.characters.map(item => (
                     <li key={item.id}>
@@ -291,7 +314,8 @@ const LeftSidebar: React.FC<LeftSidebarProps> = ({ project, activeTab, setActive
                 ))}
             </ul>
         )}
-      </nav>
+        {/* The list area is intentionally empty for the 'notes' tab */}
+      </div>
     </aside>
   );
 };
