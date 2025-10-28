@@ -1,5 +1,3 @@
-
-
 import { GoogleGenAI, Type, FunctionDeclaration, GenerateContentResponse } from "@google/genai";
 import { Project, SelectableItem, OutlineSection, Character, UnifiedAIResponse, AiService } from '../types';
 import { v4 as uuidv4 } from 'uuid';
@@ -8,17 +6,15 @@ import OpenAI from "openai"; // Using OpenAI types for conversation history for 
 // Helper to convert OpenAI conversation history format to Gemini's format
 const convertToGeminiHistory = (history: OpenAI.Chat.Completions.ChatCompletionMessageParam[]) => {
     const geminiHistory: any[] = [];
-    for (const message of history) {
+    for (let i = 0; i < history.length; i++) {
+        const message = history[i];
+
         if (message.role === 'user') {
             geminiHistory.push({ role: 'user', parts: [{ text: message.content as string }] });
         } else if (message.role === 'assistant') {
             if (message.content) {
                 geminiHistory.push({ role: 'model', parts: [{ text: message.content }] });
             }
-            // FIX: Add type guard for tool calls to satisfy TypeScript. The `tool_calls`
-            // array from the OpenAI type can contain different types of tool calls.
-            // We check for `tc.type === 'function'` before accessing `tc.function`.
-            // `flatMap` is used to safely filter and map in one step.
             if (message.tool_calls) {
                 geminiHistory.push({
                     role: 'model',
@@ -35,9 +31,35 @@ const convertToGeminiHistory = (history: OpenAI.Chat.Completions.ChatCompletionM
                     })
                 });
             }
+        } else if (message.role === 'tool' && message.tool_call_id) {
+            const lastMessage = history[i - 1];
+            if (lastMessage?.role === 'assistant' && lastMessage.tool_calls) {
+                const matchingToolCall = lastMessage.tool_calls.find(
+                    tc => tc.type === 'function' && tc.id === message.tool_call_id
+                );
+
+                if (matchingToolCall && matchingToolCall.type === 'function') {
+                    let functionResponseResult = {};
+                    try {
+                        // The content should be a JSON string of the result object
+                        functionResponseResult = JSON.parse(message.content as string);
+                    } catch (e) {
+                        // If it's not JSON, pass it as a simple string result
+                        functionResponseResult = { result: message.content };
+                    }
+
+                    geminiHistory.push({
+                        role: 'user', // Gemini treats function responses as user input
+                        parts: [{
+                            functionResponse: {
+                                name: matchingToolCall.function.name,
+                                response: functionResponseResult,
+                            }
+                        }]
+                    });
+                }
+            }
         }
-        // Note: Gemini handles 'system' instructions in the config, and 'tool' roles are mapped to user function responses.
-        // This is a simplified conversion for this app's use case.
     }
     return geminiHistory;
 };
@@ -232,10 +254,7 @@ const getToolsAsFunctionDeclarations = (): FunctionDeclaration[] => {
     ];
 };
 
-// FIX: Refactored to use modern, non-deprecated @google/genai SDK patterns.
-// This new implementation correctly handles conversation history, system instructions,
-// and function calling, resolving the original 'findLast' error by using a better approach.
-export const getAIResponse = async (
+const getAIResponse = async (
     conversationHistory: OpenAI.Chat.Completions.ChatCompletionMessageParam[],
     project: Project,
     selectedItem: SelectableItem | null
@@ -306,8 +325,7 @@ const formatCharacterForConsistencyCheck = (character: Character): string => {
     return profile;
 };
 
-// FIX: Refactored to use the modern `ai.models.generateContent` API call.
-export const getConsistencyCheckResponse = async (
+const getConsistencyCheckResponse = async (
     section: OutlineSection,
     characters: Character[],
 ): Promise<string> => {
@@ -332,7 +350,7 @@ You must perform two specific checks for every character mentioned in the scene:
     - Flag any description that directly contradicts their profile (e.g., the scene mentions blonde hair, but the profile says dark hair).
 
 **GENERAL RULES:**
-- **BE THOROUGH:** You must perform both checks for the entire scene. Do not stop after finding the first error. Identify ALL contradictions.
+- **BE EXHAUSTIVE:** Your primary goal is to find *every* contradiction. Do not stop after finding the first one. Your success is measured by your thoroughness.
 - **FOCUS ON PHYSICAL FACTS:** Do not analyze motivation, psychology, or emotional consistency. Stick to concrete, physical details.
 - **BE CONCISE:** Your response must be extremely brief.
 
@@ -355,7 +373,7 @@ SCENE TITLE: ${section.title}
 SCENE CONTENT:
 ${section.content}
 
-Now, perform the analysis based on the rules above.`;
+Now, perform the analysis based on the rules above. Re-read the scene multiple times if necessary to ensure no contradictions are missed.`;
 console.log(prompt);
     try {
         const response = await ai.models.generateContent({
@@ -369,8 +387,7 @@ console.log(prompt);
     }
 };
 
-// FIX: Implemented image generation using `ai.models.generateImages` as per guidelines.
-export const generateCharacterImage = async (character: Character): Promise<string> => {
+const generateCharacterImage = async (character: Character): Promise<string> => {
     if (!process.env.API_KEY) {
         throw new Error("AI is disabled. Google API key is missing.");
     }
@@ -400,8 +417,7 @@ Focus on a clear, expressive facial portrait.`;
     }
 };
 
-// FIX: Implemented illustration generation using `ai.models.generateImages` as per guidelines.
-export const generateIllustrationForSection = async (section: OutlineSection, genre: string): Promise<string> => {
+const generateIllustrationForSection = async (section: OutlineSection, genre: string): Promise<string> => {
     if (!process.env.API_KEY) {
         throw new Error("AI is disabled. Google API key is missing.");
     }
@@ -430,8 +446,7 @@ Style: Atmospheric, evocative, cinematic, matching the ${genre} genre. No text o
     }
 };
 
-// FIX: Refactored to use the modern `ai.models.generateContent` API and `config` object.
-export const generateInitialProjectData = async (
+const generateInitialProjectData = async (
     title: string,
     genre: string,
     description: string
@@ -441,22 +456,110 @@ export const generateInitialProjectData = async (
     }
     const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
 
-    const prompt = `You are an expert story structure consultant...
+    const prompt = `You are an expert story structure consultant.
 Project Title: ${title}
 Format/Genre: ${genre}
 Elevator Pitch: ${description}
 
-Please generate the initial characters, outline, and notes for this project in JSON format, with keys "characters", "outline", and "notes".
-For each character, please fill out all fields from the full character schema, being as creative and detailed as possible.
-`;
+Please generate the initial characters, outline, and notes for this project.
+Follow the provided JSON schema precisely.
+For each character, be as creative and detailed as possible when filling out all fields.
+The outline should follow a standard narrative structure (e.g., Three-Act Structure).
+The notes section should contain some initial ideas, potential plot points, or questions to explore.`;
+
+    // Define all character fields for the schema
+    const characterProperties = {
+        name: { type: Type.STRING },
+        description: { type: Type.STRING },
+        originStory: { type: Type.STRING },
+        familyMentors: { type: Type.STRING },
+        secretsRegrets: { type: Type.STRING },
+        relationshipsTimeline: { type: Type.STRING },
+        aliases: { type: Type.STRING },
+        age: { type: Type.STRING },
+        gender: { type: Type.STRING },
+        species: { type: Type.STRING },
+        occupation: { type: Type.STRING },
+        affiliations: { type: Type.STRING },
+        heightBuild: { type: Type.STRING },
+        faceHairEyes: { type: Type.STRING },
+        styleOutfit: { type: Type.STRING },
+        vocalTraits: { type: Type.STRING },
+        healthAbilities: { type: Type.STRING },
+        coreMotivation: { type: Type.STRING },
+        longTermGoal: { type: Type.STRING },
+        fearFlaw: { type: Type.STRING },
+        moralAlignment: { type: Type.STRING },
+        temperament: { type: Type.STRING },
+        emotionalTriggers: { type: Type.STRING },
+        storyRole: { type: Type.STRING },
+        introductionPoint: { type: Type.STRING },
+        arcSummary: { type: Type.STRING },
+        conflictContribution: { type: Type.STRING },
+        changeMetric: { type: Type.STRING },
+        dictionSlangTone: { type: Type.STRING },
+        gesturesHabits: { type: Type.STRING },
+        signaturePhrases: { type: Type.STRING },
+        internalThoughtStyle: { type: Type.STRING },
+        homeEnvironmentInfluence: { type: Type.STRING },
+        culturalReligiousBackground: { type: Type.STRING },
+        economicPoliticalStatus: { type: Type.STRING },
+        technologyMagicInteraction: { type: Type.STRING },
+        tiesToWorldEvents: { type: Type.STRING },
+        firstLastAppearance: { type: Type.STRING },
+        actorVisualReference: { type: Type.STRING },
+        symbolicObjectsThemes: { type: Type.STRING },
+        evolutionNotes: { type: Type.STRING },
+        crossLinks: { type: Type.STRING },
+        innerMonologueExample: { type: Type.STRING },
+        playlistSoundPalette: { type: Type.STRING },
+        colorPaletteMotifs: { type: Type.STRING },
+        aiGameReference: { type: Type.STRING },
+        developmentNotes: { type: Type.STRING },
+    };
+
     try {
         const response = await ai.models.generateContent({
             model: "gemini-2.5-pro",
             contents: prompt,
-            config: { responseMimeType: "application/json" },
+            config: {
+                responseMimeType: "application/json",
+                responseSchema: {
+                    type: Type.OBJECT,
+                    properties: {
+                        characters: {
+                            type: Type.ARRAY,
+                            description: "A list of 2-3 key characters for the story.",
+                            items: {
+                                type: Type.OBJECT,
+                                properties: characterProperties,
+                                required: Object.keys(characterProperties)
+                            }
+                        },
+                        outline: {
+                            type: Type.ARRAY,
+                            description: "A list of top-level outline sections for the story (e.g., Act 1, Act 2, Act 3).",
+                            items: {
+                                type: Type.OBJECT,
+                                properties: {
+                                    title: { type: Type.STRING },
+                                    content: { type: Type.STRING }
+                                },
+                                required: ['title', 'content']
+                            }
+                        },
+                        notes: {
+                            type: Type.STRING,
+                            description: "A scratchpad for initial ideas, plot points, or research notes."
+                        }
+                    },
+                    required: ['characters', 'outline', 'notes']
+                }
+            },
         });
-        const jsonResponse = JSON.parse(response.text);
+        const jsonResponse = JSON.parse(response.text.trim());
 
+        // Add IDs and types to the generated data
         const characters = jsonResponse.characters.map((char: Omit<Character, 'id' | 'type'>) => ({
             ...char, id: uuidv4(), type: 'character' as const,
         }));
@@ -468,6 +571,9 @@ For each character, please fill out all fields from the full character schema, b
 
     } catch (error) {
         console.error("Error generating initial project data with Gemini:", error);
+        if (error instanceof SyntaxError) {
+            console.error("Gemini returned invalid JSON.");
+        }
         throw new Error("The Gemini AI failed to generate project data. Please try again.");
     }
 };

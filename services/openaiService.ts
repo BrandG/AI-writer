@@ -1,5 +1,3 @@
-
-
 import OpenAI from "openai";
 import { Project, ChatMessage, SelectableItem, OutlineSection, Character, UnifiedAIResponse, AiService } from '../types';
 import { v4 as uuidv4 } from 'uuid';
@@ -215,7 +213,7 @@ function formatProjectContext(project: Project, selectedItem: SelectableItem | n
 }
 
 // Main chat function
-export const getAIResponse = async (
+const getAIResponse = async (
     conversationHistory: OpenAI.Chat.Completions.ChatCompletionMessageParam[],
     project: Project,
     selectedItem: SelectableItem | null
@@ -253,10 +251,6 @@ ${projectContext}`;
         
         const message = response.choices[0].message;
         
-        // FIX: Add type guard for tool calls to satisfy TypeScript. The `tool_calls`
-        // array from the OpenAI type can contain different types of tool calls.
-        // We check for `tc.type === 'function'` before accessing `tc.function`.
-        // `flatMap` is used to safely filter and map in one step.
         const toolCalls = message.tool_calls?.flatMap(tc => {
             if (tc.type === 'function') {
                 return [{
@@ -298,7 +292,7 @@ const formatCharacterForConsistencyCheck = (character: Character): string => {
     return profile;
 };
 
-export const getConsistencyCheckResponse = async (
+const getConsistencyCheckResponse = async (
     section: OutlineSection,
     characters: Character[],
 ): Promise<string> => {
@@ -325,7 +319,7 @@ You must perform two specific checks for every character mentioned in the scene:
     - Flag any description that directly contradicts their profile (e.g., the scene mentions blonde hair, but the profile says dark hair).
 
 **GENERAL RULES:**
-- **BE THOROUGH:** You must perform both checks for the entire scene. Do not stop after finding the first error. Identify ALL contradictions.
+- **BE EXHAUSTIVE:** Your primary goal is to find *every* contradiction. Do not stop after finding the first one. Your success is measured by your thoroughness.
 - **FOCUS ON PHYSICAL FACTS:** Do not analyze motivation, psychology, or emotional consistency. Stick to concrete, physical details.
 - **BE CONCISE:** Your response must be extremely brief.
 
@@ -353,7 +347,7 @@ ${section.content}`;
             model: 'gpt-4o',
             messages: [
                 { role: 'system', content: systemInstruction },
-                { role: 'user', content: "Please analyze the provided scene for physical inconsistencies based on your instructions." }
+                { role: 'user', content: "Please analyze the provided scene for physical inconsistencies based on your instructions. Re-read the scene multiple times if necessary to ensure no contradictions are missed." }
             ]
         });
         return response.choices[0].message.content || "No response from AI.";
@@ -364,7 +358,7 @@ ${section.content}`;
 };
 
 // Image generation functions
-export const generateCharacterImage = async (character: Character): Promise<string> => {
+const generateCharacterImage = async (character: Character): Promise<string> => {
     if (!process.env.OPENAI_API_KEY) {
         throw new Error("AI is disabled. OpenAI API key is missing.");
     }
@@ -397,7 +391,7 @@ Focus on a clear, expressive facial portrait.`;
     }
 };
 
-export const generateIllustrationForSection = async (section: OutlineSection, genre: string): Promise<string> => {
+const generateIllustrationForSection = async (section: OutlineSection, genre: string): Promise<string> => {
      if (!process.env.OPENAI_API_KEY) {
         throw new Error("AI is disabled. OpenAI API key is missing.");
     }
@@ -432,7 +426,7 @@ Style: Atmospheric, evocative, cinematic, matching the ${genre} genre. No text o
 
 
 // Initial project generation function
-export const generateInitialProjectData = async (
+const generateInitialProjectData = async (
     title: string,
     genre: string,
     description: string

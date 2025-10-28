@@ -2,6 +2,8 @@ import React, { useState, useRef, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { Project, SelectableItem, OutlineSection, Character } from '../types';
 import { ActiveTab } from './WritingWorkspace';
+import { getImage } from '../services/imageDbService';
+
 
 interface MainContentProps {
   item: SelectableItem | null;
@@ -16,7 +18,15 @@ interface MainContentProps {
   isGeneratingImage: boolean;
   onGenerateIllustration: (sectionId: string) => void;
   isGeneratingIllustration: boolean;
+  onDeleteCharacterImage: (characterId: string) => void;
+  onDeleteIllustration: (sectionId: string) => void;
 }
+
+const TrashIcon: React.FC<{ className?: string }> = ({ className }) => (
+    <svg xmlns="http://www.w3.org/2000/svg" className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor">
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+    </svg>
+);
 
 const SparklesIcon: React.FC<{className?: string}> = ({ className }) => (
     <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className={className}>
@@ -35,6 +45,55 @@ const PhotoIcon: React.FC<{className?: string}> = ({ className }) => (
       <path strokeLinecap="round" strokeLinejoin="round" d="M2.25 15.75l5.159-5.159a2.25 2.25 0 0 1 3.182 0l5.159 5.159m-1.5-1.5 1.409-1.409a2.25 2.25 0 0 1 3.182 0l2.909 2.909m-18 3.75h16.5a1.5 1.5 0 0 0 1.5-1.5V6a1.5 1.5 0 0 0-1.5-1.5H3.75A1.5 1.5 0 0 0 2.25 6v12a1.5 1.5 0 0 0 1.5 1.5Zm10.5-11.25h.008v.008h-.008V8.25Zm.375 0a.375.375 0 1 1-.75 0 .375.375 0 0 1 .75 0Z" />
     </svg>
 );
+
+const ImageViewer: React.FC<{ imageUrl?: string, alt: string, className: string, placeholder: React.ReactNode }> = ({ imageUrl, alt, className, placeholder }) => {
+    const [displaySrc, setDisplaySrc] = useState<string | null>(null);
+    const [isLoading, setIsLoading] = useState(false);
+
+    useEffect(() => {
+        let isMounted = true;
+        if (!imageUrl) {
+            setDisplaySrc(null);
+            return;
+        }
+
+        // If it starts with 'image-', it's a key for IndexedDB
+        if (imageUrl.startsWith('image-')) {
+            setIsLoading(true);
+            setDisplaySrc(null); // Clear previous image
+            getImage(imageUrl)
+                .then(b64data => {
+                    if (isMounted && b64data) {
+                        setDisplaySrc(`data:image/png;base64,${b64data}`);
+                    }
+                })
+                .catch(err => console.error("Failed to load image from DB", err))
+                .finally(() => {
+                    if (isMounted) setIsLoading(false);
+                });
+        } else {
+            // Otherwise, assume it's a fresh base64 string from the AI
+            setDisplaySrc(`data:image/png;base64,${imageUrl}`);
+            setIsLoading(false);
+        }
+        
+        return () => { isMounted = false; };
+    }, [imageUrl]);
+
+    if (isLoading) {
+        return (
+            <div className={`${className.replace('object-cover', '')} flex items-center justify-center bg-gray-800`}>
+                <div className="w-8 h-8 border-4 border-gray-500 border-t-transparent rounded-full animate-spin"></div>
+            </div>
+        );
+    }
+
+    if (displaySrc) {
+        return <img src={displaySrc} alt={alt} className={className} />;
+    }
+    
+    return <>{placeholder}</>;
+};
 
 const CollapsibleSection: React.FC<{ title: string; children: React.ReactNode; defaultOpen?: boolean }> = ({ title, children, defaultOpen = true }) => {
     const [isOpen, setIsOpen] = useState(defaultOpen);
@@ -101,23 +160,32 @@ const EditableCharacterField: React.FC<{
 const CharacterView: React.FC<{ 
     item: Extract<SelectableItem, { type: 'character' }>;
     onGenerateImage: (characterId: string) => void;
+    onDeleteImage: (characterId: string) => void;
     isGeneratingImage: boolean;
     onUpdateCharacter: (characterId: string, updatedData: Partial<Character>) => void;
-}> = ({ item, onGenerateImage, isGeneratingImage, onUpdateCharacter }) => {
+}> = ({ item, onGenerateImage, onDeleteImage, isGeneratingImage, onUpdateCharacter }) => {
     return (
         <>
-            <div className="mb-8 aspect-square w-full max-w-md mx-auto bg-gray-800 rounded-lg overflow-hidden flex items-center justify-center border-2 border-gray-700">
-                {item.imageUrl ? (
-                    <img 
-                    src={`data:image/png;base64,${item.imageUrl}`} 
+            <div className="group relative mb-8 aspect-square w-full max-w-md mx-auto bg-gray-800 rounded-lg overflow-hidden flex items-center justify-center border-2 border-gray-700">
+                <ImageViewer
+                    imageUrl={item.imageUrl}
                     alt={`Portrait of ${item.name}`}
                     className="w-full h-full object-cover"
-                    />
-                ) : (
-                    <div className="text-center text-gray-500">
-                    <PhotoIcon className="h-24 w-24 mx-auto" />
-                    <p>No image generated yet.</p>
-                    </div>
+                    placeholder={
+                        <div className="text-center text-gray-500">
+                            <PhotoIcon className="h-24 w-24 mx-auto" />
+                            <p>No image generated yet.</p>
+                        </div>
+                    }
+                />
+                 {item.imageUrl && (
+                    <button
+                        onClick={() => onDeleteImage(item.id)}
+                        className="absolute top-2 right-2 p-2 bg-black/50 rounded-full text-white/80 hover:bg-red-600 hover:text-white transition-all duration-200 opacity-0 group-hover:opacity-100 focus:opacity-100"
+                        aria-label={`Delete image for ${item.name}`}
+                    >
+                        <TrashIcon className="h-5 w-5" />
+                    </button>
                 )}
             </div>
 
@@ -300,8 +368,9 @@ const OutlineView: React.FC<{
   onToggleCharacterAssociation: (sectionId: string, characterId: string) => void;
   onConsistencyCheck: (section: OutlineSection) => void;
   onGenerateIllustration: (sectionId: string) => void;
+  onDeleteIllustration: (sectionId: string) => void;
   isGeneratingIllustration: boolean;
-}> = ({ item, project, onUpdateOutlineContent, onToggleCharacterAssociation, onConsistencyCheck, onGenerateIllustration, isGeneratingIllustration }) => {
+}> = ({ item, project, onUpdateOutlineContent, onToggleCharacterAssociation, onConsistencyCheck, onGenerateIllustration, onDeleteIllustration, isGeneratingIllustration }) => {
   const [isDropdownOpen, setDropdownOpen] = useState(false);
   const triggerRef = useRef<HTMLButtonElement>(null);
 
@@ -315,21 +384,27 @@ const OutlineView: React.FC<{
       <h1 className="text-4xl font-bold text-cyan-300 mb-8">{item.title}</h1>
 
       <CollapsibleSection title="Illustration" defaultOpen={false}>
-         <div className="group relative">
-            <div className="aspect-video w-full bg-gray-800 rounded-lg overflow-hidden flex items-center justify-center border-2 border-gray-700">
-                {item.imageUrl ? (
-                    <img 
-                        src={`data:image/png;base64,${item.imageUrl}`} 
-                        alt={`Illustration for ${item.title}`}
-                        className="w-full h-full object-cover"
-                    />
-                ) : (
-                    <div className="text-center text-gray-500">
+         <div className="group relative aspect-video w-full bg-gray-800 rounded-lg overflow-hidden flex items-center justify-center border-2 border-gray-700">
+            <ImageViewer
+                imageUrl={item.imageUrl}
+                alt={`Illustration for ${item.title}`}
+                className="w-full h-full object-cover"
+                placeholder={
+                     <div className="text-center text-gray-500">
                         <PhotoIcon className="h-24 w-24 mx-auto" />
                         <p>No illustration for this section.</p>
                     </div>
-                )}
-            </div>
+                }
+            />
+            {item.imageUrl && (
+                <button
+                    onClick={() => onDeleteIllustration(item.id)}
+                    className="absolute top-2 right-2 p-2 bg-black/50 rounded-full text-white/80 hover:bg-red-600 hover:text-white transition-all duration-200 opacity-0 group-hover:opacity-100 focus:opacity-100"
+                    aria-label={`Delete illustration for ${item.title}`}
+                >
+                    <TrashIcon className="h-5 w-5" />
+                </button>
+            )}
             <button
                 onClick={() => onGenerateIllustration(item.id)}
                 disabled={isGeneratingIllustration}
@@ -455,7 +530,7 @@ const NotesView: React.FC<{
   );
 };
 
-const MainContent: React.FC<MainContentProps> = ({ item, project, activeTab, onUpdateOutlineContent, onUpdateCharacter, onUpdateNotes, onToggleCharacterAssociation, onConsistencyCheck, onGenerateCharacterImage, isGeneratingImage, onGenerateIllustration, isGeneratingIllustration }) => {
+const MainContent: React.FC<MainContentProps> = ({ item, project, activeTab, onUpdateOutlineContent, onUpdateCharacter, onUpdateNotes, onToggleCharacterAssociation, onConsistencyCheck, onGenerateCharacterImage, isGeneratingImage, onGenerateIllustration, isGeneratingIllustration, onDeleteCharacterImage, onDeleteIllustration }) => {
   if (activeTab === 'notes') {
     return (
         <main className="flex-1 p-10 overflow-y-auto bg-gray-900">
@@ -478,6 +553,7 @@ const MainContent: React.FC<MainContentProps> = ({ item, project, activeTab, onU
           ? <CharacterView 
               item={item}
               onGenerateImage={onGenerateCharacterImage}
+              onDeleteImage={onDeleteCharacterImage}
               isGeneratingImage={isGeneratingImage}
               onUpdateCharacter={onUpdateCharacter}
             /> 
@@ -488,6 +564,7 @@ const MainContent: React.FC<MainContentProps> = ({ item, project, activeTab, onU
               onToggleCharacterAssociation={onToggleCharacterAssociation}
               onConsistencyCheck={onConsistencyCheck}
               onGenerateIllustration={onGenerateIllustration}
+              onDeleteIllustration={onDeleteIllustration}
               isGeneratingIllustration={isGeneratingIllustration}
             />
         }

@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useCallback } from 'react';
 import { Project, AiProvider, AiService } from './types';
 import ProjectSelectionPage from './components/ProjectSelectionPage';

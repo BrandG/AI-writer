@@ -1,11 +1,10 @@
-
-
 import React, { useState, useCallback, useEffect, useRef } from 'react';
 import { Project, SelectableItem, OutlineSection, Character, ChatMessage, AiService } from '../types';
 import LeftSidebar from './LeftSidebar';
 import MainContent from './MainContent';
 import ChatSidebar from './ChatSidebar';
 import { v4 as uuidv4 } from 'uuid';
+import { deleteImage } from '../services/imageDbService';
 
 
 // Recursive helper to update a title in a nested structure
@@ -62,17 +61,15 @@ const updateSectionRecursively = (sections: OutlineSection[], sectionId: string,
 };
 
 
-// Recursive helper to delete a section
 const deleteSectionRecursively = (sections: OutlineSection[], sectionId: string): OutlineSection[] => {
-    return sections.filter(section => {
-        if (section.id === sectionId) {
-            return false;
-        }
-        if (section.children) {
-            section.children = deleteSectionRecursively(section.children, sectionId);
-        }
-        return true;
-    });
+    return sections
+        .filter(section => section.id !== sectionId)
+        .map(section => {
+            if (section.children) {
+                return { ...section, children: deleteSectionRecursively(section.children, sectionId) };
+            }
+            return section;
+        });
 };
 
 
@@ -104,7 +101,6 @@ export type SaveStatus = 'unsaved' | 'saving' | 'saved' | 'error';
 export type ActiveTab = 'outline' | 'characters' | 'notes';
 
 
-// FIX: The component was not returning any JSX, causing a type error with React.FC.
 const WritingWorkspace: React.FC<WritingWorkspaceProps> = ({ project, onBack, onUpdateProject, aiService }) => {
   const [currentProject, setCurrentProject] = useState<Project>(project);
   const [activeTab, setActiveTab] = useState<ActiveTab>('outline');
@@ -187,8 +183,6 @@ const WritingWorkspace: React.FC<WritingWorkspaceProps> = ({ project, onBack, on
     setSelectedItem(item);
   }, []);
   
-  // FIX: Use a functional update for setSelectedItem to avoid stale state bugs.
-  // This ensures the update is based on the most recent state.
   const handleUpdateOutlineTitle = (sectionId: string, newTitle: string) => {
     setCurrentProject(prevProject => {
         const newOutline = updateTitleRecursively(prevProject.outline, sectionId, newTitle);
@@ -225,6 +219,7 @@ const WritingWorkspace: React.FC<WritingWorkspaceProps> = ({ project, onBack, on
             }
             return { ...prevProject, outline: newOutline };
         });
+        return { success: true, message: `Section '${args.title}' added successfully.` };
     };
 
     const handleUpdateOutlineSection = (args: { sectionId: string; newTitle?: string; newContent?: string }) => {
@@ -244,6 +239,7 @@ const WritingWorkspace: React.FC<WritingWorkspaceProps> = ({ project, onBack, on
             }
             return prev;
         });
+        return { success: true, message: `Section updated successfully.` };
     };
 
     const handleDeleteOutlineSection = (args: { sectionId: string }) => {
@@ -258,6 +254,7 @@ const WritingWorkspace: React.FC<WritingWorkspaceProps> = ({ project, onBack, on
             }
             return updatedProject;
         });
+        return { success: true, message: "Section deleted successfully." };
     };
 
     const handleMoveOutlineSection = (args: {
@@ -268,95 +265,86 @@ const WritingWorkspace: React.FC<WritingWorkspaceProps> = ({ project, onBack, on
     }) => {
         const { sectionId, targetParentId, targetSiblingId, position } = args;
 
+        // Prevent moving a section into itself
+        if (sectionId === targetParentId || sectionId === targetSiblingId) return;
+
         setCurrentProject(prevProject => {
-            const outline = JSON.parse(JSON.stringify(prevProject.outline));
             let movedItem: OutlineSection | null = null;
+
+            // 1. Immutably find and remove the item from the tree
+            const findAndRemove = (sections: OutlineSection[], id: string): OutlineSection[] => {
+                return sections.reduce((acc, section) => {
+                    if (section.id === id) {
+                        movedItem = { ...section }; // Store a copy
+                        return acc;
+                    }
+                    const newChildren = section.children ? findAndRemove(section.children, id) : undefined;
+                    acc.push({ ...section, children: newChildren });
+                    return acc;
+                }, [] as OutlineSection[]);
+            };
+
+            const outlineWithoutMoved = findAndRemove(prevProject.outline, sectionId);
             
+            if (!movedItem) return prevProject; // Item not found, do nothing
+
+            // 2. Prevent dropping a parent into one of its own children
             const isDescendant = (node: OutlineSection, parentId: string): boolean => {
                 if (node.id === parentId) return true;
-                if (node.children) {
-                    return node.children.some(child => isDescendant(child, parentId));
-                }
-                return false;
+                return node.children?.some(child => isDescendant(child, parentId)) ?? false;
             };
 
-            const findAndRemove = (sections: OutlineSection[], id: string): OutlineSection[] => {
-                return sections.filter(section => {
-                    if (section.id === id) {
-                        movedItem = section;
-                        return false;
-                    }
-                    if (section.children) {
-                        section.children = findAndRemove(section.children, id);
-                    }
-                    return true;
-                });
-            };
-
-            const outlineWithoutMoved = findAndRemove(outline, sectionId);
-            if (!movedItem) {
-                console.error("Item to move not found:", sectionId);
-                return prevProject;
-            }
-
-            // Prevent dropping a parent into its own child.
-            if (targetParentId && isDescendant(movedItem, targetParentId)) {
+            const targetId = targetParentId || targetSiblingId;
+            if (targetId && isDescendant(movedItem, targetId)) {
                 console.warn("Cannot move a parent section into one of its own children.");
                 return prevProject;
-            }
-            if (targetSiblingId && isDescendant(movedItem, targetSiblingId)) {
-                console.warn("Cannot move a parent section into one of its own children.");
-                return prevProject;
-            }
-
-            let newOutline = outlineWithoutMoved;
-            let inserted = false;
-
-            if (targetSiblingId && position) {
-                const findAndInsertBySibling = (sections: OutlineSection[]): OutlineSection[] => {
-                    if (inserted) return sections;
-
-                    const targetIndex = sections.findIndex(s => s.id === targetSiblingId);
-                    if (targetIndex > -1) {
-                        const insertIndex = position === 'before' ? targetIndex : targetIndex + 1;
-                        sections.splice(insertIndex, 0, movedItem!);
-                        inserted = true;
-                        return sections;
-                    }
-
-                    return sections.map(section => {
-                        if (section.children && !inserted) {
-                            section.children = findAndInsertBySibling(section.children);
-                        }
-                        return section;
-                    });
-                };
-                newOutline = findAndInsertBySibling(newOutline);
-            } else if (targetParentId) {
-                const findAndInsertInParent = (sections: OutlineSection[]): OutlineSection[] => {
-                    if (inserted) return sections;
-                    // FIX: The .map function must always return a value. Added `return section` to all paths.
-                    return sections.map(section => {
-                        if (section.id === targetParentId) {
-                            section.children = [...(section.children || []), movedItem!];
-                            inserted = true;
-                        } else if (section.children && !inserted) {
-                            // FIX: Corrected recursive call from non-existent 'findAndInsert' to 'findAndInsertInParent'.
-                            section.children = findAndInsertInParent(section.children);
-                        }
-                        return section;
-                    });
-                };
-                newOutline = findAndInsertInParent(newOutline);
-            }
-
-            if (!inserted) {
-                // If it wasn't inserted as a child or sibling, it becomes a root item.
-                newOutline.push(movedItem!);
             }
             
+            // 3. Immutably insert the item into its new location
+            const findAndInsert = (sections: OutlineSection[]): OutlineSection[] => {
+                // Case A: Drop onto a parent
+                if (targetParentId) {
+                    return sections.map(section => {
+                        if (section.id === targetParentId) {
+                            return { ...section, children: [...(section.children || []), movedItem!] };
+                        }
+                        if (section.children) {
+                            return { ...section, children: findAndInsert(section.children) };
+                        }
+                        return section;
+                    });
+                }
+                // Case B: Drop next to a sibling
+                if (targetSiblingId && position) {
+                    const targetIndex = sections.findIndex(s => s.id === targetSiblingId);
+                    if (targetIndex > -1) {
+                        const newSections = [...sections];
+                        const insertIndex = position === 'before' ? targetIndex : targetIndex + 1;
+                        newSections.splice(insertIndex, 0, movedItem!);
+                        return newSections;
+                    }
+                    // Recurse if sibling not found at this level
+                    return sections.map(section => {
+                        if (section.children) {
+                            return { ...section, children: findAndInsert(section.children) };
+                        }
+                        return section;
+                    });
+                }
+                return sections; // Should not happen if a target is defined
+            };
+            
+            let newOutline;
+            if (targetParentId || targetSiblingId) {
+                newOutline = findAndInsert(outlineWithoutMoved);
+            } else {
+                // No target, becomes a root item
+                newOutline = [...outlineWithoutMoved, movedItem];
+            }
+
             return { ...prevProject, outline: newOutline };
         });
+        return { success: true, message: 'Section moved successfully.' };
     };
     
     // Character Handlers (used by AI tools and MainContent)
@@ -370,6 +358,7 @@ const WritingWorkspace: React.FC<WritingWorkspaceProps> = ({ project, onBack, on
             ...prevProject,
             characters: [...prevProject.characters, newCharacter],
         }));
+        return { success: true, message: `Character '${args.name}' added successfully.` };
     };
 
     const handleUpdateCharacter = (characterId: string, updatedData: Partial<Character>) => {
@@ -386,6 +375,7 @@ const WritingWorkspace: React.FC<WritingWorkspaceProps> = ({ project, onBack, on
             }
             return prev;
         });
+        return { success: true, message: `Character updated successfully.` };
     };
     
     const handleDeleteCharacter = (args: { characterId: string }) => {
@@ -414,6 +404,7 @@ const WritingWorkspace: React.FC<WritingWorkspaceProps> = ({ project, onBack, on
             }
             return updatedProject;
         });
+        return { success: true, message: "Character deleted successfully." };
     };
 
     const handleUpdateNotes = (newNotes: string) => {
@@ -468,6 +459,18 @@ const WritingWorkspace: React.FC<WritingWorkspaceProps> = ({ project, onBack, on
         }
     };
 
+    const handleDeleteCharacterImage = async (characterId: string) => {
+        const character = currentProject.characters.find(c => c.id === characterId);
+        if (character?.imageUrl && character.imageUrl.startsWith('image-')) {
+            try {
+                await deleteImage(character.imageUrl);
+            } catch (error) {
+                console.error("Failed to delete character image from DB:", error);
+            }
+        }
+        handleUpdateCharacter(characterId, { imageUrl: undefined });
+    };
+
     const handleGenerateIllustration = async (sectionId: string) => {
         const findSection = (sections: OutlineSection[], id: string): OutlineSection | undefined => {
             for (const section of sections) {
@@ -505,12 +508,46 @@ const WritingWorkspace: React.FC<WritingWorkspaceProps> = ({ project, onBack, on
         }
     };
 
+    const handleDeleteIllustration = async (sectionId: string) => {
+        const findSection = (sections: OutlineSection[], id: string): OutlineSection | undefined => {
+            for (const section of sections) {
+                if (section.id === id) return section;
+                if (section.children) {
+                    const found = findSection(section.children, id);
+                    if (found) return found;
+                }
+            }
+            return undefined;
+        };
+        const section = findSection(currentProject.outline, sectionId);
+
+        if (section?.imageUrl && section.imageUrl.startsWith('image-')) {
+            try {
+                await deleteImage(section.imageUrl);
+            } catch (error) {
+                console.error("Failed to delete illustration from DB:", error);
+            }
+        }
+
+        setCurrentProject(prevProject => {
+            const newOutline = updateSectionRecursively(prevProject.outline, sectionId, { imageUrl: undefined });
+            return { ...prevProject, outline: newOutline };
+        });
+
+        setSelectedItem(prev => {
+            if (prev?.id === sectionId && prev.type === 'outline') {
+                return { ...prev, imageUrl: undefined };
+            }
+            return prev;
+        });
+    };
+
     // Wrapper to handle AI `updateCharacter` tool calls correctly
     const handleAiUpdateCharacter = (args: { characterId: string; [key: string]: any }) => {
         const { characterId, ...updates } = args;
         if (!characterId) {
             console.error("AI tried to update character without providing characterId.");
-            return;
+            return { success: false, message: "Character ID was not provided." };
         }
 
         const remappedUpdates: Partial<Character> = {};
@@ -522,7 +559,7 @@ const WritingWorkspace: React.FC<WritingWorkspaceProps> = ({ project, onBack, on
             }
         }
 
-        handleUpdateCharacter(characterId, remappedUpdates);
+        return handleUpdateCharacter(characterId, remappedUpdates);
     };
 
     const handleSendMessage = async (userInput: string) => {
@@ -530,17 +567,16 @@ const WritingWorkspace: React.FC<WritingWorkspaceProps> = ({ project, onBack, on
         const userMessage: ChatMessage = { role: 'user', text: userInput };
         setMessages(prev => [...prev, userMessage]);
 
-        const newConversationHistory = [...conversationHistory, { role: 'user', content: userInput }];
-        setConversationHistory(newConversationHistory);
+        let currentHistory: any[] = [...conversationHistory, { role: 'user', content: userInput }];
+        setConversationHistory(currentHistory);
         
         try {
-            const response = await aiService.getAIResponse(newConversationHistory, currentProject, selectedItem);
+            const response = await aiService.getAIResponse(currentHistory, currentProject, selectedItem);
             
             const toolCalls = response.toolCalls;
 
             if (toolCalls && toolCalls.length > 0) {
-                let toolMessages: string[] = [];
-                 const toolFunctions: { [key: string]: (args: any) => void } = {
+                 const toolFunctions: { [key: string]: (args: any) => any } = {
                     addOutlineSection: handleAddOutlineSection,
                     updateOutlineSection: handleUpdateOutlineSection,
                     deleteOutlineSection: handleDeleteOutlineSection,
@@ -549,35 +585,56 @@ const WritingWorkspace: React.FC<WritingWorkspaceProps> = ({ project, onBack, on
                     updateCharacter: handleAiUpdateCharacter, // Use the wrapper
                     deleteCharacter: handleDeleteCharacter,
                 };
-
-                // Add assistant message with tool calls to history
-                // The exact format for OpenAI history needs to match what the API expects for follow-up calls.
-                const historyToolCalls = toolCalls.map(tc => ({
-                    id: tc.id,
-                    type: 'function' as const,
-                    function: {
-                        name: tc.function.name,
-                        arguments: tc.function.arguments,
-                    }
-                }));
-
-                setConversationHistory(prev => [...prev, { role: 'assistant', tool_calls: historyToolCalls }]);
                 
-                for (const toolCall of toolCalls) {
+                // Add assistant message with tool calls to history
+                const assistantToolCallMessage = {
+                    role: 'assistant' as const,
+                    tool_calls: toolCalls.map(tc => ({
+                        id: tc.id,
+                        type: 'function' as const,
+                        function: { name: tc.function.name, arguments: tc.function.arguments },
+                    })),
+                };
+                currentHistory.push(assistantToolCallMessage);
+                
+                // Execute tools and collect their results
+                const toolResultMessages = toolCalls.map(toolCall => {
                     const functionName = toolCall.function.name;
                     const functionArgs = JSON.parse(toolCall.function.arguments);
-
+                    let result = { success: false, message: `Unknown function call: ${functionName}` };
+                    
                     if (toolFunctions[functionName]) {
-                        toolFunctions[functionName](functionArgs);
-                        toolMessages.push(`Executed: ${functionName}`);
-                    } else {
-                        console.warn(`Unknown function call: ${functionName}`);
-                        toolMessages.push(`Error: AI tried to use an unknown tool '${functionName}'.`);
+                        try {
+                           result = toolFunctions[functionName](functionArgs);
+                        } catch (e) {
+                            console.error(`Error executing tool ${functionName}:`, e);
+                            result = { success: false, message: `Error executing tool: ${e instanceof Error ? e.message : String(e)}` };
+                        }
                     }
-                }
+
+                    return {
+                        role: 'tool' as const,
+                        tool_call_id: toolCall.id,
+                        content: JSON.stringify(result),
+                    };
+                });
                 
-                const toolResponseMessage: ChatMessage = { role: 'model', text: `(Action taken: ${toolMessages.join(', ')})` };
-                setMessages(prev => [...prev, toolResponseMessage]);
+                // Add tool results to history and call the AI again
+                currentHistory.push(...toolResultMessages);
+                setConversationHistory(currentHistory);
+
+                const finalResponse = await aiService.getAIResponse(currentHistory, currentProject, selectedItem);
+
+                if (finalResponse.text) {
+                    const modelMessage: ChatMessage = { role: 'model', text: finalResponse.text };
+                    setMessages(prev => [...prev, modelMessage]);
+                    setConversationHistory(prev => [...prev, { role: 'assistant', content: finalResponse.text }]);
+                } else {
+                    const modelMessage: ChatMessage = { role: 'model', text: "(Actions performed successfully.)" };
+                    setMessages(prev => [...prev, modelMessage]);
+                    setConversationHistory(prev => [...prev, { role: 'assistant', content: null }]);
+                }
+
 
             } else if (response.text) {
                 const modelMessage: ChatMessage = { role: 'model', text: response.text };
@@ -642,8 +699,10 @@ const WritingWorkspace: React.FC<WritingWorkspaceProps> = ({ project, onBack, on
             }}
             onConsistencyCheck={handleConsistencyCheck}
             onGenerateCharacterImage={handleGenerateCharacterImage}
+            onDeleteCharacterImage={handleDeleteCharacterImage}
             isGeneratingImage={isGeneratingImage}
             onGenerateIllustration={handleGenerateIllustration}
+            onDeleteIllustration={handleDeleteIllustration}
             isGeneratingIllustration={isGeneratingIllustration}
         />
         <ChatSidebar 
