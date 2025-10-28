@@ -5,6 +5,7 @@ import MainContent from './MainContent';
 import ChatSidebar from './ChatSidebar';
 import { v4 as uuidv4 } from 'uuid';
 import { deleteImage } from '../services/imageDbService';
+import ConfirmModal from './ConfirmModal';
 
 
 // Recursive helper to update a title in a nested structure
@@ -112,6 +113,7 @@ const WritingWorkspace: React.FC<WritingWorkspaceProps> = ({ project, onBack, on
   const [isGeneratingImage, setIsGeneratingImage] = useState(false);
   const [isGeneratingIllustration, setIsGeneratingIllustration] = useState(false);
   const [saveStatus, setSaveStatus] = useState<SaveStatus>('saved');
+  const [characterToDelete, setCharacterToDelete] = useState<Character | null>(null);
   
   // Track the current project ID to differentiate between a project switch and a data update.
   const [currentProjectId, setCurrentProjectId] = useState<string>(project.id);
@@ -655,6 +657,23 @@ const WritingWorkspace: React.FC<WritingWorkspaceProps> = ({ project, onBack, on
 
   return (
     <div className="flex h-screen w-full">
+        <ConfirmModal
+            isOpen={!!characterToDelete}
+            onClose={() => setCharacterToDelete(null)}
+            onConfirm={() => {
+                if (characterToDelete) {
+                    handleDeleteCharacter({ characterId: characterToDelete.id });
+                    setCharacterToDelete(null);
+                }
+            }}
+            title="Confirm Character Deletion"
+            confirmButtonText="Delete Character"
+        >
+            <p>
+                Are you sure you want to permanently delete the character <strong className="font-semibold text-white">"{characterToDelete?.name || ''}"</strong>? This will also remove them from any associated outline sections. This action cannot be undone.
+            </p>
+        </ConfirmModal>
+
         <LeftSidebar 
             project={currentProject}
             activeTab={activeTab}
@@ -665,6 +684,7 @@ const WritingWorkspace: React.FC<WritingWorkspaceProps> = ({ project, onBack, on
             onUpdateOutlineTitle={handleUpdateOutlineTitle}
             onAddSubItem={(parentId) => handleAddOutlineSection({ parentId, title: "New Section"})}
             onAddRootItem={() => handleAddOutlineSection({ title: "New Section"})}
+            onDeleteOutlineSection={(sectionId) => handleDeleteOutlineSection({ sectionId })}
             onReorderOutline={(draggedId, targetId, position) => {
                 if (position === 'on') {
                     handleMoveOutlineSection({ sectionId: draggedId, targetParentId: targetId });
@@ -680,6 +700,7 @@ const WritingWorkspace: React.FC<WritingWorkspaceProps> = ({ project, onBack, on
             activeTab={activeTab}
             onUpdateOutlineContent={(sectionId, newContent) => handleUpdateOutlineSection({ sectionId, newContent })}
             onUpdateCharacter={handleUpdateCharacter}
+            onDeleteCharacterRequest={(character) => setCharacterToDelete(character)}
             onUpdateNotes={handleUpdateNotes}
             onToggleCharacterAssociation={(sectionId, characterId) => {
                 setCurrentProject(prevProject => ({

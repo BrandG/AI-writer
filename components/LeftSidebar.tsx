@@ -1,9 +1,9 @@
-
-
 import React, { useState, useEffect } from 'react';
 import { Project, SelectableItem, OutlineSection } from '../types';
 import { SaveStatus, ActiveTab } from './WritingWorkspace';
 import StatusIndicator from './StatusIndicator';
+import Dropdown from './Dropdown';
+import ConfirmModal from './ConfirmModal';
 
 interface LeftSidebarProps {
   project: Project;
@@ -15,6 +15,7 @@ interface LeftSidebarProps {
   onUpdateOutlineTitle: (id: string, newTitle: string) => void;
   onAddSubItem: (parentId: string) => void;
   onAddRootItem: () => void;
+  onDeleteOutlineSection: (id: string) => void;
   onReorderOutline: (draggedId: string, targetId: string, position: 'above' | 'below' | 'on') => void;
   saveStatus: SaveStatus;
 }
@@ -34,6 +35,12 @@ const PlusIcon: React.FC<{className?: string}> = ({ className }) => (
 const ChevronDownIcon: React.FC<{className?: string}> = ({ className }) => (
     <svg xmlns="http://www.w3.org/2000/svg" className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor">
         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+    </svg>
+);
+
+const EllipsisVerticalIcon: React.FC<{className?: string}> = ({ className }) => (
+    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className={className}>
+      <path strokeLinecap="round" strokeLinejoin="round" d="M12 6.75a.75.75 0 1 1 0-1.5.75.75 0 0 1 0 1.5ZM12 12.75a.75.75 0 1 1 0-1.5.75.75 0 0 1 0 1.5ZM12 18.75a.75.75 0 1 1 0-1.5.75.75 0 0 1 0 1.5Z" />
     </svg>
 );
 
@@ -67,6 +74,7 @@ interface OutlineItemProps {
     onSelectItem: (item: SelectableItem) => void;
     onUpdateOutlineTitle: (id: string, newTitle: string) => void;
     onAddSubItem: (parentId: string) => void;
+    onDeleteOutlineSection: (id: string) => void;
     draggedItemId: string | null;
     setDraggedItemId: (id: string | null) => void;
     dragOverInfo: DragOverInfo | null;
@@ -75,18 +83,17 @@ interface OutlineItemProps {
 }
 
 const OutlineItem: React.FC<OutlineItemProps> = ({
-    item, level, selectedItem, onSelectItem, onUpdateOutlineTitle, onAddSubItem,
+    item, level, selectedItem, onSelectItem, onUpdateOutlineTitle, onAddSubItem, onDeleteOutlineSection,
     draggedItemId, setDraggedItemId, dragOverInfo, setDragOverInfo, onReorderOutline
 }) => {
     const [isOpen, setIsOpen] = useState(true);
-    // Use local state for the input to make it a controlled component
     const [inputValue, setInputValue] = useState(item.title);
+    const [isConfirmOpen, setIsConfirmOpen] = useState(false);
     const hasChildren = item.children && item.children.length > 0;
     const isSelected = selectedItem?.id === item.id;
     const isBeingDragged = draggedItemId === item.id;
     const isDragTarget = dragOverInfo?.id === item.id;
 
-    // Sync local state if the prop changes from outside (e.g., from AI update)
     useEffect(() => {
         setInputValue(item.title);
     }, [item.title]);
@@ -94,7 +101,6 @@ const OutlineItem: React.FC<OutlineItemProps> = ({
     const handleDragStart = (e: React.DragEvent) => {
         e.dataTransfer.setData('text/plain', item.id);
         e.dataTransfer.effectAllowed = 'move';
-        // Use a timeout to allow the browser to render the drag image before updating state
         setTimeout(() => setDraggedItemId(item.id), 0);
     };
 
@@ -120,7 +126,6 @@ const OutlineItem: React.FC<OutlineItemProps> = ({
     
     const handleDragLeave = (e: React.DragEvent) => {
         e.preventDefault();
-        // Check if the mouse is leaving the element entirely, not just moving to a child
         if (!(e.currentTarget as HTMLLIElement).contains(e.relatedTarget as Node)) {
              setDragOverInfo(null);
         }
@@ -145,7 +150,6 @@ const OutlineItem: React.FC<OutlineItemProps> = ({
         if (newTitle && newTitle !== item.title) {
             onUpdateOutlineTitle(item.id, newTitle);
         } else {
-            // If the title is empty or unchanged, revert to the original prop value
             setInputValue(item.title);
         }
     };
@@ -159,10 +163,25 @@ const OutlineItem: React.FC<OutlineItemProps> = ({
         }
     };
 
-
     return (
         <li className="relative">
-             {isDragTarget && dragOverInfo.position === 'above' && <div className="absolute top-0 left-0 right-0 h-0.5 bg-cyan-400 z-10"></div>}
+            <ConfirmModal
+                isOpen={isConfirmOpen}
+                onClose={() => setIsConfirmOpen(false)}
+                onConfirm={() => {
+                    onDeleteOutlineSection(item.id);
+                    setIsConfirmOpen(false);
+                }}
+                title="Delete Section"
+                confirmButtonText="Delete"
+            >
+                <p>
+                    Are you sure you want to delete <strong className="font-semibold text-white">"{item.title}"</strong>?
+                    {hasChildren && " All of its sub-items will also be permanently deleted."} This action cannot be undone.
+                </p>
+            </ConfirmModal>
+
+            {isDragTarget && dragOverInfo.position === 'above' && <div className="absolute top-0 left-0 right-0 h-0.5 bg-cyan-400 z-10"></div>}
             <div
                 draggable="true"
                 onDragStart={handleDragStart}
@@ -197,13 +216,38 @@ const OutlineItem: React.FC<OutlineItemProps> = ({
                       className={`w-full p-2 rounded-md text-sm transition-all duration-200 bg-transparent border-0 focus:outline-none focus:bg-gray-700 focus:ring-0 ${isSelected ? 'bg-cyan-600/20 text-cyan-300 font-semibold' : 'text-gray-300 hover:bg-gray-700/50 hover:text-white'}`}
                     />
                 </div>
-                <button
-                  onClick={() => onAddSubItem(item.id)}
-                  aria-label={`Add sub-item to ${item.title}`}
-                  className="ml-2 p-1 rounded-full text-gray-400 hover:bg-gray-600 hover:text-white opacity-0 group-hover:opacity-100 focus:opacity-100 transition-opacity flex-shrink-0"
-                >
-                    <PlusIcon className="h-4 w-4" />
-                </button>
+                <div className="ml-2 flex-shrink-0 opacity-0 group-hover:opacity-100 focus-within:opacity-100 transition-opacity">
+                    <Dropdown
+                        trigger={
+                            <button
+                                aria-label={`Actions for ${item.title}`}
+                                className="p-1 rounded-full text-gray-400 hover:bg-gray-600 hover:text-white"
+                            >
+                                <EllipsisVerticalIcon className="h-4 w-4" />
+                            </button>
+                        }
+                        menuClasses="w-40"
+                    >
+                        {(close) => (
+                            <div className="py-1" role="none">
+                                <button
+                                    onClick={() => { onAddSubItem(item.id); close(); }}
+                                    className="w-full text-left text-gray-300 block px-4 py-2 text-sm hover:bg-gray-700 hover:text-white"
+                                    role="menuitem"
+                                >
+                                    Add Sub-item
+                                </button>
+                                <button
+                                    onClick={() => { setIsConfirmOpen(true); close(); }}
+                                    className="w-full text-left text-red-400 block px-4 py-2 text-sm hover:bg-gray-700 hover:text-red-300"
+                                    role="menuitem"
+                                >
+                                    Delete Section
+                                </button>
+                            </div>
+                        )}
+                    </Dropdown>
+                </div>
             </div>
              {isDragTarget && dragOverInfo.position === 'below' && <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-cyan-400 z-10"></div>}
             {isOpen && hasChildren && (
@@ -217,6 +261,7 @@ const OutlineItem: React.FC<OutlineItemProps> = ({
                             onSelectItem={onSelectItem}
                             onUpdateOutlineTitle={onUpdateOutlineTitle}
                             onAddSubItem={onAddSubItem}
+                            onDeleteOutlineSection={onDeleteOutlineSection}
                             draggedItemId={draggedItemId}
                             setDraggedItemId={setDraggedItemId}
                             dragOverInfo={dragOverInfo}
@@ -231,7 +276,7 @@ const OutlineItem: React.FC<OutlineItemProps> = ({
 };
 
 
-const LeftSidebar: React.FC<LeftSidebarProps> = ({ project, activeTab, setActiveTab, selectedItem, onSelectItem, onBack, onUpdateOutlineTitle, onAddSubItem, onAddRootItem, onReorderOutline, saveStatus }) => {
+const LeftSidebar: React.FC<LeftSidebarProps> = ({ project, activeTab, setActiveTab, selectedItem, onSelectItem, onBack, onUpdateOutlineTitle, onAddSubItem, onAddRootItem, onDeleteOutlineSection, onReorderOutline, saveStatus }) => {
   const [draggedItemId, setDraggedItemId] = useState<string | null>(null);
   const [dragOverInfo, setDragOverInfo] = useState<DragOverInfo | null>(null);
 
@@ -290,6 +335,7 @@ const LeftSidebar: React.FC<LeftSidebarProps> = ({ project, activeTab, setActive
                             onSelectItem={onSelectItem}
                             onUpdateOutlineTitle={onUpdateOutlineTitle}
                             onAddSubItem={onAddSubItem}
+                            onDeleteOutlineSection={onDeleteOutlineSection}
                             draggedItemId={draggedItemId}
                             setDraggedItemId={setDraggedItemId}
                             dragOverInfo={dragOverInfo}

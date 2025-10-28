@@ -1,5 +1,6 @@
 import React, { useState, useRef } from 'react';
 import { Project, AiProvider } from '../types';
+import ConfirmModal from './ConfirmModal';
 
 interface ProjectSelectionPageProps {
   savedProjects: Project[];
@@ -118,6 +119,8 @@ const AddProjectModal: React.FC<{
 
     if (!isOpen) return null;
 
+    const wordCount = (description || '').trim().split(/\s+/).filter(Boolean).length;
+
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
         if (!title.trim() || isCreating) {
@@ -185,14 +188,19 @@ const AddProjectModal: React.FC<{
                         </div>
                         <div className="mb-6">
                             <label htmlFor="project-description" className="block text-sm font-medium text-gray-300 mb-1">Elevator Pitch</label>
-                            <textarea
-                                id="project-description"
-                                value={description}
-                                onChange={(e) => setDescription(e.target.value)}
-                                rows={4}
-                                className="w-full bg-gray-700 border border-gray-600 rounded-md p-2 text-white focus:outline-none focus:ring-2 focus:ring-cyan-500 resize-none disabled:opacity-50"
-                                placeholder="A brief summary of your project..."
-                            />
+                            <div className="relative">
+                                <textarea
+                                    id="project-description"
+                                    value={description}
+                                    onChange={(e) => setDescription(e.target.value)}
+                                    rows={4}
+                                    className="w-full bg-gray-700 border border-gray-600 rounded-md p-2 pb-8 text-white focus:outline-none focus:ring-2 focus:ring-cyan-500 resize-none disabled:opacity-50"
+                                    placeholder="A brief summary of your project..."
+                                />
+                                <div className="absolute bottom-2 right-2 text-xs text-gray-500 bg-gray-700/80 px-2 py-1 rounded">
+                                    {wordCount} {wordCount === 1 ? 'word' : 'words'}
+                                </div>
+                            </div>
                         </div>
                         <div className="flex justify-end gap-4">
                             <button type="button" onClick={handleClose} className="px-4 py-2 rounded-md text-gray-300 bg-gray-600 hover:bg-gray-500 transition-colors disabled:opacity-50">Cancel</button>
@@ -204,39 +212,6 @@ const AddProjectModal: React.FC<{
         </div>
     );
 };
-
-const ConfirmDeleteModal: React.FC<{
-    isOpen: boolean;
-    onClose: () => void;
-    onConfirm: () => void;
-    projectName: string;
-}> = ({ isOpen, onClose, onConfirm, projectName }) => {
-    if (!isOpen) return null;
-
-    return (
-        <div
-            className="fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center z-50"
-            aria-modal="true"
-            role="dialog"
-            onClick={onClose}
-        >
-            <div
-                className="bg-gray-800 rounded-lg shadow-xl p-8 max-w-md w-full"
-                onClick={(e) => e.stopPropagation()}
-            >
-                <h2 className="text-2xl font-bold mb-4 text-red-400">Confirm Deletion</h2>
-                <p className="text-gray-300 mb-6">
-                    Are you sure you want to permanently delete the project <strong className="font-semibold text-white">"{projectName}"</strong>? This action cannot be undone.
-                </p>
-                <div className="flex justify-end gap-4">
-                    <button type="button" onClick={onClose} className="px-4 py-2 rounded-md text-gray-300 bg-gray-600 hover:bg-gray-500 transition-colors">Cancel</button>
-                    <button type="button" onClick={onConfirm} className="px-4 py-2 rounded-md font-semibold text-white bg-red-600 hover:bg-red-500 transition-colors">Delete Project</button>
-                </div>
-            </div>
-        </div>
-    );
-};
-
 
 const ProjectSelectionPage: React.FC<ProjectSelectionPageProps> = ({ savedProjects, onSelectProject, onDeleteProject, onUpdateProjectTitle, onAddProject, onImportProjects, aiProvider, onAiProviderChange }) => {
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -332,12 +307,18 @@ const ProjectSelectionPage: React.FC<ProjectSelectionPageProps> = ({ savedProjec
         onAddProject={handleCreateProject}
         isCreating={isCreating}
       />
-      <ConfirmDeleteModal
+      <ConfirmModal
         isOpen={!!projectToDelete}
         onClose={() => setProjectToDelete(null)}
         onConfirm={handleConfirmDelete}
-        projectName={projectToDelete?.title || ''}
-      />
+        title="Confirm Deletion"
+        confirmButtonText="Delete Project"
+      >
+        <p>
+            Are you sure you want to permanently delete the project <strong className="font-semibold text-white">"{projectToDelete?.title || ''}"</strong>? This action cannot be undone.
+        </p>
+      </ConfirmModal>
+
       <input
         type="file"
         ref={importInputRef}

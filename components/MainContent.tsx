@@ -1,8 +1,8 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { createPortal } from 'react-dom';
 import { Project, SelectableItem, OutlineSection, Character } from '../types';
 import { ActiveTab } from './WritingWorkspace';
 import { getImage } from '../services/imageDbService';
+import Dropdown from './Dropdown';
 
 
 interface MainContentProps {
@@ -11,6 +11,7 @@ interface MainContentProps {
   activeTab: ActiveTab;
   onUpdateOutlineContent: (sectionId: string, newContent: string) => void;
   onUpdateCharacter: (characterId: string, updatedData: Partial<Character>) => void;
+  onDeleteCharacterRequest: (character: Character) => void;
   onUpdateNotes: (newNotes: string) => void;
   onToggleCharacterAssociation: (sectionId: string, characterId: string) => void;
   onConsistencyCheck: (section: OutlineSection) => void;
@@ -128,6 +129,9 @@ const EditableCharacterField: React.FC<{
     placeholder?: string;
 }> = ({ character, field, label, onUpdateCharacter, placeholder = "Enter details..." }) => {
     const textareaRef = useRef<HTMLTextAreaElement>(null);
+    const [currentValue, setCurrentValue] = useState(character[field] as string || '');
+
+    const wordCount = (currentValue || '').trim().split(/\s+/).filter(Boolean).length;
 
     const adjustTextareaHeight = (element: HTMLTextAreaElement | null) => {
         if (!element) return;
@@ -136,23 +140,34 @@ const EditableCharacterField: React.FC<{
     };
 
     useEffect(() => {
-        // Adjust height on initial load and when switching characters
+        // Sync local state if character or field content changes from props
+        setCurrentValue(character[field] as string || '');
+    }, [character.id, character[field], field]);
+
+    useEffect(() => {
+        // Adjust height on initial render and when content changes
         adjustTextareaHeight(textareaRef.current);
-    }, [character.id, character[field]]);
+    }, [currentValue]);
+
 
     return (
         <div>
             <h2 className="text-lg font-semibold text-gray-400 border-b border-gray-600 pb-2 mb-2">{label}</h2>
-            <textarea
-                ref={textareaRef}
-                key={`${character.id}-${field}`}
-                defaultValue={character[field] as string || ''}
-                onBlur={(e) => onUpdateCharacter(character.id, { [field]: e.target.value })}
-                onInput={(e) => adjustTextareaHeight(e.currentTarget)}
-                placeholder={placeholder}
-                aria-label={label}
-                className="w-full bg-transparent p-2 rounded-md text-gray-300 leading-relaxed focus:outline-none focus:ring-2 focus:ring-cyan-500 focus:bg-gray-800 transition-all resize-none min-h-[4rem]"
-            />
+            <div className="relative">
+                <textarea
+                    ref={textareaRef}
+                    key={`${character.id}-${field}`}
+                    value={currentValue}
+                    onChange={(e) => setCurrentValue(e.target.value)}
+                    onBlur={() => onUpdateCharacter(character.id, { [field]: currentValue })}
+                    placeholder={placeholder}
+                    aria-label={label}
+                    className="w-full bg-transparent p-2 pb-8 rounded-md text-gray-300 leading-relaxed focus:outline-none focus:ring-2 focus:ring-cyan-500 focus:bg-gray-800 transition-all resize-none min-h-[4rem]"
+                />
+                <div className="absolute bottom-2 right-2 text-xs text-gray-500 bg-gray-900/50 px-1 rounded">
+                    {wordCount} {wordCount === 1 ? 'word' : 'words'}
+                </div>
+            </div>
         </div>
     );
 };
@@ -163,7 +178,8 @@ const CharacterView: React.FC<{
     onDeleteImage: (characterId: string) => void;
     isGeneratingImage: boolean;
     onUpdateCharacter: (characterId: string, updatedData: Partial<Character>) => void;
-}> = ({ item, onGenerateImage, onDeleteImage, isGeneratingImage, onUpdateCharacter }) => {
+    onDeleteCharacterRequest: (character: Character) => void;
+}> = ({ item, onGenerateImage, onDeleteImage, isGeneratingImage, onUpdateCharacter, onDeleteCharacterRequest }) => {
     return (
         <>
             <div className="group relative mb-8 aspect-square w-full max-w-md mx-auto bg-gray-800 rounded-lg overflow-hidden flex items-center justify-center border-2 border-gray-700">
@@ -291,7 +307,7 @@ const CharacterView: React.FC<{
                 </div>
             </CollapsibleSection>
 
-            <div className="mt-8 pt-6 border-t border-gray-700">
+            <div className="mt-8 pt-6 border-t border-gray-700 space-y-4">
                 <button
                     onClick={() => onGenerateImage(item.id)}
                     disabled={isGeneratingImage}
@@ -310,55 +326,17 @@ const CharacterView: React.FC<{
                     </>
                     )}
                 </button>
+                 <button
+                    onClick={() => onDeleteCharacterRequest(item)}
+                    className="w-full flex items-center justify-center p-3 rounded-md text-sm bg-transparent border border-red-500/50 text-red-400 hover:bg-red-500/20 hover:text-red-300 font-semibold transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-red-500"
+                    aria-label={`Delete character ${item.name}`}
+                >
+                    <TrashIcon className="h-5 w-5 mr-2" />
+                    Delete Character
+                </button>
             </div>
         </>
     )
-};
-
-const DropdownMenu: React.FC<{
-    isOpen: boolean;
-    onClose: () => void;
-    triggerRef: React.RefObject<HTMLElement>;
-    children: React.ReactNode;
-}> = ({ isOpen, onClose, triggerRef, children }) => {
-    const dropdownRef = useRef<HTMLDivElement>(null);
-    const [position, setPosition] = useState<{ top: number; left: number }>({ top: 0, left: 0 });
-
-    useEffect(() => {
-        if (isOpen && triggerRef.current) {
-            const rect = triggerRef.current.getBoundingClientRect();
-            setPosition({
-                top: rect.bottom + window.scrollY,
-                left: rect.left + window.scrollX,
-            });
-        }
-    }, [isOpen, triggerRef]);
-
-    useEffect(() => {
-        if (!isOpen) return;
-        const handleClickOutside = (event: MouseEvent) => {
-            if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
-                onClose();
-            }
-        };
-        document.addEventListener('mousedown', handleClickOutside);
-        return () => document.removeEventListener('mousedown', handleClickOutside);
-    }, [isOpen, onClose]);
-    
-    if (!isOpen) return null;
-
-    return createPortal(
-        <div
-            ref={dropdownRef}
-            style={{ top: `${position.top}px`, left: `${position.left}px` }}
-            className="fixed origin-top-left w-56 rounded-md shadow-lg bg-gray-800 ring-1 ring-black ring-opacity-5 focus:outline-none z-50"
-            role="menu"
-            aria-orientation="vertical"
-        >
-            {children}
-        </div>,
-        document.body
-    );
 };
 
 const OutlineView: React.FC<{
@@ -371,12 +349,17 @@ const OutlineView: React.FC<{
   onDeleteIllustration: (sectionId: string) => void;
   isGeneratingIllustration: boolean;
 }> = ({ item, project, onUpdateOutlineContent, onToggleCharacterAssociation, onConsistencyCheck, onGenerateIllustration, onDeleteIllustration, isGeneratingIllustration }) => {
-  const [isDropdownOpen, setDropdownOpen] = useState(false);
-  const triggerRef = useRef<HTMLButtonElement>(null);
+  const [content, setContent] = useState(item.content);
+  const wordCount = (content || '').trim().split(/\s+/).filter(Boolean).length;
 
-  const handleToolClick = (toolAction: () => void) => {
+  useEffect(() => {
+      // Sync local state when the selected item changes
+      setContent(item.content);
+  }, [item.id, item.content]);
+  
+  const handleToolClick = (toolAction: () => void, closeDropdown: () => void) => {
     toolAction();
-    setDropdownOpen(false);
+    closeDropdown();
   };
 
   return (
@@ -427,61 +410,62 @@ const OutlineView: React.FC<{
       </CollapsibleSection>
 
       <CollapsibleSection title="Text" defaultOpen={true}>
-        <textarea
-            key={item.id} // Re-mount to reflect state changes if another item is selected
-            defaultValue={item.content}
-            onBlur={(e) => onUpdateOutlineContent(item.id, e.target.value)}
-            placeholder="Start writing the content for this section..."
-            aria-label="Outline section content"
-            className="w-full h-80 bg-gray-800 border border-gray-700 rounded-md p-4 text-gray-300 leading-relaxed focus:outline-none focus:ring-2 focus:ring-cyan-500 transition-shadow"
-        />
+        <div className="relative">
+            <textarea
+                key={item.id} // Re-mount to reflect state changes if another item is selected
+                value={content}
+                onChange={e => setContent(e.target.value)}
+                onBlur={() => onUpdateOutlineContent(item.id, content)}
+                placeholder="Start writing the content for this section..."
+                aria-label="Outline section content"
+                className="w-full h-80 bg-gray-800 border border-gray-700 rounded-md p-4 pb-8 text-gray-300 leading-relaxed focus:outline-none focus:ring-2 focus:ring-cyan-500 transition-shadow"
+            />
+             <div className="absolute bottom-2 right-2 text-xs text-gray-500 bg-gray-800/80 px-2 py-1 rounded">
+                {wordCount} {wordCount === 1 ? 'word' : 'words'}
+            </div>
+        </div>
 
         <div className="mt-4 relative inline-block text-left">
-            <div>
-                <button
-                    ref={triggerRef}
-                    type="button"
-                    onClick={() => setDropdownOpen(o => !o)}
-                    className="inline-flex items-center justify-center rounded-md shadow-sm px-4 py-2 text-sm font-medium text-white bg-gray-700 hover:bg-gray-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-gray-900 focus:ring-cyan-500 transition-colors"
-                    id="ai-tools-menu"
-                    aria-haspopup="true"
-                    aria-expanded={isDropdownOpen}
-                >
-                    <SparklesIcon className="h-5 w-5 mr-2 -ml-1" />
-                    AI Tools
-                    <ChevronDownIcon className="h-5 w-5 ml-2 -mr-1" />
-                </button>
-            </div>
-
-            <DropdownMenu
-                isOpen={isDropdownOpen}
-                onClose={() => setDropdownOpen(false)}
-                triggerRef={triggerRef}
+            <Dropdown
+                trigger={
+                    <button
+                        type="button"
+                        className="inline-flex items-center justify-center rounded-md shadow-sm px-4 py-2 text-sm font-medium text-white bg-gray-700 hover:bg-gray-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-gray-900 focus:ring-cyan-500 transition-colors"
+                        id="ai-tools-menu"
+                        aria-haspopup="true"
+                    >
+                        <SparklesIcon className="h-5 w-5 mr-2 -ml-1" />
+                        AI Tools
+                        <ChevronDownIcon className="h-5 w-5 ml-2 -mr-1" />
+                    </button>
+                }
             >
-                <div className="py-1" role="none">
-                    <button
-                        onClick={() => handleToolClick(() => onConsistencyCheck(item))}
-                        className="w-full text-left text-gray-300 block px-4 py-2 text-sm hover:bg-gray-700 hover:text-white"
-                        role="menuitem"
-                    >
-                        Check consistency
-                    </button>
-                    <button
-                        disabled
-                        className="w-full text-left text-gray-500 block px-4 py-2 text-sm cursor-not-allowed"
-                        role="menuitem"
-                    >
-                        Get reading level
-                    </button>
-                    <button
-                        disabled
-                        className="w-full text-left text-gray-500 block px-4 py-2 text-sm cursor-not-allowed"
-                        role="menuitem"
-                    >
-                        Clean up text
-                    </button>
-                </div>
-            </DropdownMenu>
+                {(close) => (
+                    <div className="py-1" role="none">
+                        <button
+                            onClick={() => handleToolClick(() => onConsistencyCheck(item), close)}
+                            className="w-full text-left text-gray-300 block px-4 py-2 text-sm hover:bg-gray-700 hover:text-white"
+                            role="menuitem"
+                        >
+                            Check consistency
+                        </button>
+                        <button
+                            disabled
+                            className="w-full text-left text-gray-500 block px-4 py-2 text-sm cursor-not-allowed"
+                            role="menuitem"
+                        >
+                            Get reading level
+                        </button>
+                        <button
+                            disabled
+                            className="w-full text-left text-gray-500 block px-4 py-2 text-sm cursor-not-allowed"
+                            role="menuitem"
+                        >
+                            Clean up text
+                        </button>
+                    </div>
+                )}
+            </Dropdown>
         </div>
       </CollapsibleSection>
 
@@ -514,23 +498,36 @@ const NotesView: React.FC<{
   notes: string;
   onUpdateNotes: (newNotes: string) => void;
 }> = ({ notes, onUpdateNotes }) => {
+  const [currentNotes, setCurrentNotes] = useState(notes);
+  const wordCount = (currentNotes || '').trim().split(/\s+/).filter(Boolean).length;
+
+  useEffect(() => {
+    // Sync local state when the project changes
+    setCurrentNotes(notes);
+  }, [notes]);
+  
   return (
     <>
       <h1 className="text-4xl font-bold text-cyan-300 mb-4">Notes</h1>
       <p className="text-gray-400 mb-6">A scratchpad for your unstructured thoughts, ideas, and snippets of research.</p>
-      <textarea
-        key={notes} // Use project ID or another stable key if available
-        defaultValue={notes}
-        onBlur={(e) => onUpdateNotes(e.target.value)}
-        placeholder="Jot down your ideas here..."
-        aria-label="Project notes"
-        className="w-full h-[70vh] bg-gray-800 border border-gray-700 rounded-md p-6 text-gray-300 leading-relaxed focus:outline-none focus:ring-2 focus:ring-cyan-500 transition-shadow"
-      />
+      <div className="relative h-[70vh]">
+        <textarea
+            value={currentNotes}
+            onChange={(e) => setCurrentNotes(e.target.value)}
+            onBlur={() => onUpdateNotes(currentNotes)}
+            placeholder="Jot down your ideas here..."
+            aria-label="Project notes"
+            className="w-full h-full bg-gray-800 border border-gray-700 rounded-md p-6 pb-8 text-gray-300 leading-relaxed focus:outline-none focus:ring-2 focus:ring-cyan-500 transition-shadow"
+        />
+        <div className="absolute bottom-2 right-2 text-xs text-gray-500 bg-gray-800/80 px-2 py-1 rounded">
+            {wordCount} {wordCount === 1 ? 'word' : 'words'}
+        </div>
+      </div>
     </>
   );
 };
 
-const MainContent: React.FC<MainContentProps> = ({ item, project, activeTab, onUpdateOutlineContent, onUpdateCharacter, onUpdateNotes, onToggleCharacterAssociation, onConsistencyCheck, onGenerateCharacterImage, isGeneratingImage, onGenerateIllustration, isGeneratingIllustration, onDeleteCharacterImage, onDeleteIllustration }) => {
+const MainContent: React.FC<MainContentProps> = ({ item, project, activeTab, onUpdateOutlineContent, onUpdateCharacter, onDeleteCharacterRequest, onUpdateNotes, onToggleCharacterAssociation, onConsistencyCheck, onGenerateCharacterImage, isGeneratingImage, onGenerateIllustration, isGeneratingIllustration, onDeleteCharacterImage, onDeleteIllustration }) => {
   if (activeTab === 'notes') {
     return (
         <main className="flex-1 p-10 overflow-y-auto bg-gray-900">
@@ -556,6 +553,7 @@ const MainContent: React.FC<MainContentProps> = ({ item, project, activeTab, onU
               onDeleteImage={onDeleteCharacterImage}
               isGeneratingImage={isGeneratingImage}
               onUpdateCharacter={onUpdateCharacter}
+              onDeleteCharacterRequest={onDeleteCharacterRequest}
             /> 
           : <OutlineView 
               item={item} 
