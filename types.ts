@@ -51,6 +51,7 @@ export interface Character {
   colorPaletteMotifs?: string;
   aiGameReference?: string;
   developmentNotes?: string;
+  exportConfig?: { [key: string]: boolean };
 }
 
 export interface OutlineSection {
@@ -61,6 +62,7 @@ export interface OutlineSection {
   children?: OutlineSection[];
   characterIds?: string[];
   imageUrl?: string;
+  includeInExport?: boolean;
 }
 
 export interface Project {
@@ -71,6 +73,7 @@ export interface Project {
   outline: OutlineSection[];
   characters: Character[];
   notes: string;
+  exportNotes?: boolean;
 }
 
 export interface ChatMessage {

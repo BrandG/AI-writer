@@ -59,10 +59,11 @@ const Dropdown: React.FC<DropdownProps> = ({ trigger, children, menuClasses = 'w
             e.stopPropagation();
             e.preventDefault();
             handleToggle();
-            // FIX: Safely check for and call the original onClick handler to avoid TypeScript errors.
-            // FIX: Replaced the 'in' operator with a direct property check to fix "Type 'unknown' is not assignable to type 'object'" error.
-            if (trigger.props && typeof trigger.props.onClick === 'function') {
-                trigger.props.onClick(e);
+            // FIX: The original trigger element might have its own onClick handler. To preserve it,
+            // we must check for it and call it. The `trigger.props` type is too restrictive to
+            // directly access `onClick`, so we cast it to `any` to perform the check and call.
+            if (trigger.props && typeof (trigger.props as any).onClick === 'function') {
+                (trigger.props as any).onClick(e);
             }
         },
         'aria-haspopup': 'true',

@@ -13,6 +13,7 @@ interface MainContentProps {
   onUpdateCharacter: (characterId: string, updatedData: Partial<Character>) => void;
   onDeleteCharacterRequest: (character: Character) => void;
   onUpdateNotes: (newNotes: string) => void;
+  onToggleNotesExport: () => void;
   onToggleCharacterAssociation: (sectionId: string, characterId: string) => void;
   onConsistencyCheck: (section: OutlineSection) => void;
   onGenerateCharacterImage: (characterId: string) => void;
@@ -96,7 +97,15 @@ const ImageViewer: React.FC<{ imageUrl?: string, alt: string, className: string,
     return <>{placeholder}</>;
 };
 
-const CollapsibleSection: React.FC<{ title: string; children: React.ReactNode; defaultOpen?: boolean }> = ({ title, children, defaultOpen = true }) => {
+const CollapsibleSection: React.FC<{
+    title: string;
+    children: React.ReactNode;
+    defaultOpen?: boolean;
+    exportId?: string;
+    isExportable?: boolean;
+    isIncludedInExport?: boolean;
+    onToggleExport?: (id: string) => void;
+}> = ({ title, children, defaultOpen = true, exportId, isExportable, isIncludedInExport, onToggleExport }) => {
     const [isOpen, setIsOpen] = useState(defaultOpen);
 
     return (
@@ -106,7 +115,19 @@ const CollapsibleSection: React.FC<{ title: string; children: React.ReactNode; d
                 className="w-full flex justify-between items-center p-4 text-left text-lg font-bold text-gray-200 hover:bg-gray-700/50 focus:outline-none transition-colors"
                 aria-expanded={isOpen}
             >
-                <span>{title}</span>
+                <div className="flex items-center">
+                    {isExportable && (
+                         <input
+                            type="checkbox"
+                            checked={isIncludedInExport ?? true}
+                            onChange={(e) => { e.stopPropagation(); onToggleExport?.(exportId!); }}
+                            aria-label={`Include ${title} in export`}
+                            title="Include in export"
+                            className="mr-3 form-checkbox h-4 w-4 bg-gray-600 border-gray-500 rounded text-cyan-500 focus:ring-cyan-600 cursor-pointer"
+                        />
+                    )}
+                    <span>{title}</span>
+                </div>
                 <ChevronDownIcon className={`h-5 w-5 transition-transform duration-300 text-gray-400 ${isOpen ? 'rotate-180' : 'rotate-0'}`} />
             </button>
             <div className={`grid transition-all duration-500 ease-in-out ${isOpen ? 'grid-rows-[1fr] opacity-100' : 'grid-rows-[0fr] opacity-0'}`}>
@@ -124,10 +145,9 @@ const CollapsibleSection: React.FC<{ title: string; children: React.ReactNode; d
 const EditableCharacterField: React.FC<{
     character: Character;
     field: keyof Character;
-    label: string;
     onUpdateCharacter: (characterId: string, updatedData: Partial<Character>) => void;
     placeholder?: string;
-}> = ({ character, field, label, onUpdateCharacter, placeholder = "Enter details..." }) => {
+}> = ({ character, field, onUpdateCharacter, placeholder = "Enter details..." }) => {
     const textareaRef = useRef<HTMLTextAreaElement>(null);
     const [currentValue, setCurrentValue] = useState(character[field] as string || '');
 
@@ -151,22 +171,19 @@ const EditableCharacterField: React.FC<{
 
 
     return (
-        <div>
-            <h2 className="text-lg font-semibold text-gray-400 border-b border-gray-600 pb-2 mb-2">{label}</h2>
-            <div className="relative">
-                <textarea
-                    ref={textareaRef}
-                    key={`${character.id}-${field}`}
-                    value={currentValue}
-                    onChange={(e) => setCurrentValue(e.target.value)}
-                    onBlur={() => onUpdateCharacter(character.id, { [field]: currentValue })}
-                    placeholder={placeholder}
-                    aria-label={label}
-                    className="w-full bg-transparent p-2 pb-8 rounded-md text-gray-300 leading-relaxed focus:outline-none focus:ring-2 focus:ring-cyan-500 focus:bg-gray-800 transition-all resize-none min-h-[4rem]"
-                />
-                <div className="absolute bottom-2 right-2 text-xs text-gray-500 bg-gray-900/50 px-1 rounded">
-                    {wordCount} {wordCount === 1 ? 'word' : 'words'}
-                </div>
+        <div className="relative">
+            <textarea
+                ref={textareaRef}
+                key={`${character.id}-${field}`}
+                value={currentValue}
+                onChange={(e) => setCurrentValue(e.target.value)}
+                onBlur={() => onUpdateCharacter(character.id, { [field]: currentValue })}
+                placeholder={placeholder}
+                aria-label={field}
+                className="w-full bg-transparent p-2 pb-8 rounded-md text-gray-300 leading-relaxed focus:outline-none focus:ring-2 focus:ring-cyan-500 focus:bg-gray-800 transition-all resize-none min-h-[4rem]"
+            />
+            <div className="absolute bottom-2 right-2 text-xs text-gray-500 bg-gray-900/50 px-1 rounded">
+                {wordCount} {wordCount === 1 ? 'word' : 'words'}
             </div>
         </div>
     );
@@ -180,6 +197,16 @@ const CharacterView: React.FC<{
     onUpdateCharacter: (characterId: string, updatedData: Partial<Character>) => void;
     onDeleteCharacterRequest: (character: Character) => void;
 }> = ({ item, onGenerateImage, onDeleteImage, isGeneratingImage, onUpdateCharacter, onDeleteCharacterRequest }) => {
+    
+    const handleToggleExport = (sectionId: string) => {
+        onUpdateCharacter(item.id, {
+            exportConfig: {
+                ...(item.exportConfig || {}),
+                [sectionId]: !(item.exportConfig?.[sectionId] ?? true),
+            }
+        });
+    };
+
     return (
         <>
             <div className="group relative mb-8 aspect-square w-full max-w-md mx-auto bg-gray-800 rounded-lg overflow-hidden flex items-center justify-center border-2 border-gray-700">
@@ -213,97 +240,108 @@ const CharacterView: React.FC<{
                 className="w-full text-4xl font-bold text-cyan-300 mb-6 bg-transparent rounded-md p-2 -m-2 focus:outline-none focus:bg-gray-800 focus:ring-2 focus:ring-cyan-500"
             />
             
-            <div className="mb-6">
-                <EditableCharacterField character={item} field="description" label="Description" onUpdateCharacter={onUpdateCharacter} placeholder="Enter character description..."/>
+            <div className="bg-gray-800/50 rounded-lg border border-gray-700 p-4 mb-6">
+                 <div className="flex items-center mb-2">
+                    <input
+                        type="checkbox"
+                        checked={item.exportConfig?.description ?? true}
+                        onChange={() => handleToggleExport('description')}
+                        aria-label="Include Description in export"
+                        title="Include in export"
+                        className="mr-3 form-checkbox h-4 w-4 bg-gray-600 border-gray-500 rounded text-cyan-500 focus:ring-cyan-600 cursor-pointer"
+                    />
+                    <h2 className="text-lg font-semibold text-gray-300">Description</h2>
+                </div>
+                <EditableCharacterField character={item} field="description" onUpdateCharacter={onUpdateCharacter} placeholder="Enter character description..."/>
             </div>
 
-            <CollapsibleSection title="Core Identity" defaultOpen={false}>
-                <div className="space-y-6">
-                    <EditableCharacterField character={item} field="aliases" label="Aliases / Titles" onUpdateCharacter={onUpdateCharacter} />
-                    <EditableCharacterField character={item} field="age" label="Age / Birthdate / Timeline Notes" onUpdateCharacter={onUpdateCharacter} />
-                    <EditableCharacterField character={item} field="gender" label="Gender / Pronouns" onUpdateCharacter={onUpdateCharacter} />
-                    <EditableCharacterField character={item} field="species" label="Species / Race / Origin" onUpdateCharacter={onUpdateCharacter} />
-                    <EditableCharacterField character={item} field="occupation" label="Occupation / Social Role / Rank" onUpdateCharacter={onUpdateCharacter} />
-                    <EditableCharacterField character={item} field="affiliations" label="Affiliations" onUpdateCharacter={onUpdateCharacter} />
+            <CollapsibleSection title="Core Identity" defaultOpen={false} exportId="coreIdentity" isExportable isIncludedInExport={item.exportConfig?.coreIdentity ?? true} onToggleExport={handleToggleExport}>
+                <div className="space-y-4">
+                    <div><h3 className="text-sm font-semibold text-gray-400 mb-1">Aliases / Titles</h3><EditableCharacterField character={item} field="aliases" onUpdateCharacter={onUpdateCharacter} /></div>
+                    <div><h3 className="text-sm font-semibold text-gray-400 mb-1">Age / Birthdate</h3><EditableCharacterField character={item} field="age" onUpdateCharacter={onUpdateCharacter} /></div>
+                    <div><h3 className="text-sm font-semibold text-gray-400 mb-1">Gender / Pronouns</h3><EditableCharacterField character={item} field="gender" onUpdateCharacter={onUpdateCharacter} /></div>
+                    <div><h3 className="text-sm font-semibold text-gray-400 mb-1">Species / Race</h3><EditableCharacterField character={item} field="species" onUpdateCharacter={onUpdateCharacter} /></div>
+                    <div><h3 className="text-sm font-semibold text-gray-400 mb-1">Occupation / Rank</h3><EditableCharacterField character={item} field="occupation" onUpdateCharacter={onUpdateCharacter} /></div>
+                    <div><h3 className="text-sm font-semibold text-gray-400 mb-1">Affiliations</h3><EditableCharacterField character={item} field="affiliations" onUpdateCharacter={onUpdateCharacter} /></div>
                 </div>
             </CollapsibleSection>
             
-            <CollapsibleSection title="Physical Description" defaultOpen={false}>
-                <div className="space-y-6">
-                    <EditableCharacterField character={item} field="heightBuild" label="Height / Build / Posture / Movement style" onUpdateCharacter={onUpdateCharacter} />
-                    <EditableCharacterField character={item} field="faceHairEyes" label="Face / Hair / Eyes / Distinguishing Features" onUpdateCharacter={onUpdateCharacter} />
-                    <EditableCharacterField character={item} field="styleOutfit" label="Style / Typical Outfit / Accessories" onUpdateCharacter={onUpdateCharacter} />
-                    <EditableCharacterField character={item} field="vocalTraits" label="Vocal Traits / Speech Patterns" onUpdateCharacter={onUpdateCharacter} />
-                    <EditableCharacterField character={item} field="healthAbilities" label="Health / Physical Limitations / Abilities" onUpdateCharacter={onUpdateCharacter} />
+            <CollapsibleSection title="Physical Description" defaultOpen={false} exportId="physicalDescription" isExportable isIncludedInExport={item.exportConfig?.physicalDescription ?? true} onToggleExport={handleToggleExport}>
+                <div className="space-y-4">
+                    <div><h3 className="text-sm font-semibold text-gray-400 mb-1">Height / Build / Posture</h3><EditableCharacterField character={item} field="heightBuild" onUpdateCharacter={onUpdateCharacter} /></div>
+                    <div><h3 className="text-sm font-semibold text-gray-400 mb-1">Face / Hair / Eyes</h3><EditableCharacterField character={item} field="faceHairEyes" onUpdateCharacter={onUpdateCharacter} /></div>
+                    <div><h3 className="text-sm font-semibold text-gray-400 mb-1">Style / Outfit</h3><EditableCharacterField character={item} field="styleOutfit" onUpdateCharacter={onUpdateCharacter} /></div>
+                    <div><h3 className="text-sm font-semibold text-gray-400 mb-1">Vocal Traits</h3><EditableCharacterField character={item} field="vocalTraits" onUpdateCharacter={onUpdateCharacter} /></div>
+                    <div><h3 className="text-sm font-semibold text-gray-400 mb-1">Health / Abilities</h3><EditableCharacterField character={item} field="healthAbilities" onUpdateCharacter={onUpdateCharacter} /></div>
                 </div>
             </CollapsibleSection>
 
-            <CollapsibleSection title="Psychology & Motivation" defaultOpen={false}>
-                 <div className="space-y-6">
-                    <EditableCharacterField character={item} field="coreMotivation" label="Core Motivation / Primary Desire" onUpdateCharacter={onUpdateCharacter} placeholder="What drives them every day?"/>
-                    <EditableCharacterField character={item} field="longTermGoal" label="Long-Term Goal" onUpdateCharacter={onUpdateCharacter} placeholder="What do they think will fulfill them?"/>
-                    <EditableCharacterField character={item} field="fearFlaw" label="Fear / Flaw / Blind Spot" onUpdateCharacter={onUpdateCharacter} />
-                    <EditableCharacterField character={item} field="moralAlignment" label="Moral Alignment / Values / Boundaries" onUpdateCharacter={onUpdateCharacter} />
-                    <EditableCharacterField character={item} field="temperament" label="Temperament / Personality Type" onUpdateCharacter={onUpdateCharacter} placeholder="MBTI, Enneagram, archetype, etc." />
-                    <EditableCharacterField character={item} field="emotionalTriggers" label="Emotional Triggers / Habits / Quirks" onUpdateCharacter={onUpdateCharacter} />
+            <CollapsibleSection title="Psychology & Motivation" defaultOpen={false} exportId="psychology" isExportable isIncludedInExport={item.exportConfig?.psychology ?? true} onToggleExport={handleToggleExport}>
+                 <div className="space-y-4">
+                    <div><h3 className="text-sm font-semibold text-gray-400 mb-1">Core Motivation</h3><EditableCharacterField character={item} field="coreMotivation" onUpdateCharacter={onUpdateCharacter} placeholder="What drives them every day?"/></div>
+                    <div><h3 className="text-sm font-semibold text-gray-400 mb-1">Long-Term Goal</h3><EditableCharacterField character={item} field="longTermGoal" onUpdateCharacter={onUpdateCharacter} placeholder="What do they think will fulfill them?"/></div>
+                    <div><h3 className="text-sm font-semibold text-gray-400 mb-1">Fear / Flaw</h3><EditableCharacterField character={item} field="fearFlaw" onUpdateCharacter={onUpdateCharacter} /></div>
+                    <div><h3 className="text-sm font-semibold text-gray-400 mb-1">Moral Alignment</h3><EditableCharacterField character={item} field="moralAlignment" onUpdateCharacter={onUpdateCharacter} /></div>
+                    <div><h3 className="text-sm font-semibold text-gray-400 mb-1">Temperament</h3><EditableCharacterField character={item} field="temperament" onUpdateCharacter={onUpdateCharacter} placeholder="MBTI, Enneagram, archetype, etc." /></div>
+                    <div><h3 className="text-sm font-semibold text-gray-400 mb-1">Emotional Triggers</h3><EditableCharacterField character={item} field="emotionalTriggers" onUpdateCharacter={onUpdateCharacter} /></div>
                 </div>
             </CollapsibleSection>
 
-            <CollapsibleSection title="Voice & Behavior" defaultOpen={false}>
-                 <div className="space-y-6">
-                    <EditableCharacterField character={item} field="dictionSlangTone" label="Diction / Slang / Tone" onUpdateCharacter={onUpdateCharacter} />
-                    <EditableCharacterField character={item} field="gesturesHabits" label="Common Gestures / Physical Habits" onUpdateCharacter={onUpdateCharacter} />
-                    <EditableCharacterField character={item} field="signaturePhrases" label="Signature Phrases / Speech Tics" onUpdateCharacter={onUpdateCharacter} />
-                    <EditableCharacterField character={item} field="internalThoughtStyle" label="Internal Thought Style" onUpdateCharacter={onUpdateCharacter} placeholder="e.g., pragmatic, poetic, paranoid" />
+            <CollapsibleSection title="Voice & Behavior" defaultOpen={false} exportId="voiceBehavior" isExportable isIncludedInExport={item.exportConfig?.voiceBehavior ?? true} onToggleExport={handleToggleExport}>
+                 <div className="space-y-4">
+                    <div><h3 className="text-sm font-semibold text-gray-400 mb-1">Diction / Slang / Tone</h3><EditableCharacterField character={item} field="dictionSlangTone" onUpdateCharacter={onUpdateCharacter} /></div>
+                    <div><h3 className="text-sm font-semibold text-gray-400 mb-1">Gestures / Habits</h3><EditableCharacterField character={item} field="gesturesHabits" onUpdateCharacter={onUpdateCharacter} /></div>
+                    <div><h3 className="text-sm font-semibold text-gray-400 mb-1">Signature Phrases</h3><EditableCharacterField character={item} field="signaturePhrases" onUpdateCharacter={onUpdateCharacter} /></div>
+                    <div><h3 className="text-sm font-semibold text-gray-400 mb-1">Internal Thought Style</h3><EditableCharacterField character={item} field="internalThoughtStyle" onUpdateCharacter={onUpdateCharacter} placeholder="e.g., pragmatic, poetic, paranoid" /></div>
                 </div>
             </CollapsibleSection>
 
-            <CollapsibleSection title="Backstory" defaultOpen={false}>
-                 <div className="space-y-6">
-                    <EditableCharacterField character={item} field="originStory" label="Origin Story / Key Formative Events" onUpdateCharacter={onUpdateCharacter} />
-                    <EditableCharacterField character={item} field="familyMentors" label="Family / Mentors / Enemies / Lovers" onUpdateCharacter={onUpdateCharacter} />
-                    <EditableCharacterField character={item} field="secretsRegrets" label="Secrets / Regrets / Turning Points" onUpdateCharacter={onUpdateCharacter} />
-                    <EditableCharacterField character={item} field="relationshipsTimeline" label="Major Relationships Timeline" onUpdateCharacter={onUpdateCharacter} />
+            <CollapsibleSection title="Backstory" defaultOpen={false} exportId="backstory" isExportable isIncludedInExport={item.exportConfig?.backstory ?? true} onToggleExport={handleToggleExport}>
+                 <div className="space-y-4">
+                    <div><h3 className="text-sm font-semibold text-gray-400 mb-1">Origin Story</h3><EditableCharacterField character={item} field="originStory" onUpdateCharacter={onUpdateCharacter} /></div>
+                    <div><h3 className="text-sm font-semibold text-gray-400 mb-1">Family / Mentors / Enemies</h3><EditableCharacterField character={item} field="familyMentors" onUpdateCharacter={onUpdateCharacter} /></div>
+                    <div><h3 className="text-sm font-semibold text-gray-400 mb-1">Secrets / Regrets</h3><EditableCharacterField character={item} field="secretsRegrets" onUpdateCharacter={onUpdateCharacter} /></div>
+                    <div><h3 className="text-sm font-semibold text-gray-400 mb-1">Relationships Timeline</h3><EditableCharacterField character={item} field="relationshipsTimeline" onUpdateCharacter={onUpdateCharacter} /></div>
                 </div>
             </CollapsibleSection>
 
-            <CollapsibleSection title="Narrative Function" defaultOpen={false}>
-                 <div className="space-y-6">
-                    <EditableCharacterField character={item} field="storyRole" label="Story Role / Archetype" onUpdateCharacter={onUpdateCharacter} placeholder="e.g., mentor, trickster, foil, love interest"/>
-                    <EditableCharacterField character={item} field="introductionPoint" label="Introduction Point" onUpdateCharacter={onUpdateCharacter} placeholder="Where do they first appear in the story?"/>
-                    <EditableCharacterField character={item} field="arcSummary" label="Arc Summary" onUpdateCharacter={onUpdateCharacter} placeholder="beginning → midpoint → end"/>
-                    <EditableCharacterField character={item} field="conflictContribution" label="Conflict Contribution" onUpdateCharacter={onUpdateCharacter} placeholder="How do they drive tension?"/>
-                    <EditableCharacterField character={item} field="changeMetric" label="Change Metric" onUpdateCharacter={onUpdateCharacter} placeholder="What lesson do they learn, or fail to learn?"/>
+            <CollapsibleSection title="Narrative Function" defaultOpen={false} exportId="narrativeFunction" isExportable isIncludedInExport={item.exportConfig?.narrativeFunction ?? true} onToggleExport={handleToggleExport}>
+                 <div className="space-y-4">
+                    <div><h3 className="text-sm font-semibold text-gray-400 mb-1">Story Role / Archetype</h3><EditableCharacterField character={item} field="storyRole" onUpdateCharacter={onUpdateCharacter} placeholder="e.g., mentor, trickster, foil, love interest"/></div>
+                    <div><h3 className="text-sm font-semibold text-gray-400 mb-1">Introduction Point</h3><EditableCharacterField character={item} field="introductionPoint" onUpdateCharacter={onUpdateCharacter} placeholder="Where do they first appear in the story?"/></div>
+                    <div><h3 className="text-sm font-semibold text-gray-400 mb-1">Arc Summary</h3><EditableCharacterField character={item} field="arcSummary" onUpdateCharacter={onUpdateCharacter} placeholder="beginning → midpoint → end"/></div>
+                    <div><h3 className="text-sm font-semibold text-gray-400 mb-1">Conflict Contribution</h3><EditableCharacterField character={item} field="conflictContribution" onUpdateCharacter={onUpdateCharacter} placeholder="How do they drive tension?"/></div>
+                    <div><h3 className="text-sm font-semibold text-gray-400 mb-1">Change Metric</h3><EditableCharacterField character={item} field="changeMetric" onUpdateCharacter={onUpdateCharacter} placeholder="What lesson do they learn, or fail to learn?"/></div>
                 </div>
             </CollapsibleSection>
 
-            <CollapsibleSection title="Context & World Integration" defaultOpen={false}>
-                 <div className="space-y-6">
-                    <EditableCharacterField character={item} field="homeEnvironmentInfluence" label="Home / Environment Influence" onUpdateCharacter={onUpdateCharacter} />
-                    <EditableCharacterField character={item} field="culturalReligiousBackground" label="Cultural / Religious Background" onUpdateCharacter={onUpdateCharacter} />
-                    <EditableCharacterField character={item} field="economicPoliticalStatus" label="Economic / Political Status" onUpdateCharacter={onUpdateCharacter} />
-                    <EditableCharacterField character={item} field="technologyMagicInteraction" label="Technology or Magic Interaction" onUpdateCharacter={onUpdateCharacter} />
-                    <EditableCharacterField character={item} field="tiesToWorldEvents" label="Ties to Major World Events" onUpdateCharacter={onUpdateCharacter} />
+            <CollapsibleSection title="Context & World Integration" defaultOpen={false} exportId="context" isExportable isIncludedInExport={item.exportConfig?.context ?? true} onToggleExport={handleToggleExport}>
+                 <div className="space-y-4">
+                    <div><h3 className="text-sm font-semibold text-gray-400 mb-1">Home / Environment Influence</h3><EditableCharacterField character={item} field="homeEnvironmentInfluence" onUpdateCharacter={onUpdateCharacter} /></div>
+                    <div><h3 className="text-sm font-semibold text-gray-400 mb-1">Cultural / Religious Background</h3><EditableCharacterField character={item} field="culturalReligiousBackground" onUpdateCharacter={onUpdateCharacter} /></div>
+                    <div><h3 className="text-sm font-semibold text-gray-400 mb-1">Economic / Political Status</h3><EditableCharacterField character={item} field="economicPoliticalStatus" onUpdateCharacter={onUpdateCharacter} /></div>
+                    <div><h3 className="text-sm font-semibold text-gray-400 mb-1">Technology or Magic Interaction</h3><EditableCharacterField character={item} field="technologyMagicInteraction" onUpdateCharacter={onUpdateCharacter} /></div>
+                    <div><h3 className="text-sm font-semibold text-gray-400 mb-1">Ties to Major World Events</h3><EditableCharacterField character={item} field="tiesToWorldEvents" onUpdateCharacter={onUpdateCharacter} /></div>
                 </div>
             </CollapsibleSection>
 
-            <CollapsibleSection title="Continuity Aids" defaultOpen={false}>
-                <div className="space-y-6">
-                    <EditableCharacterField character={item} field="firstLastAppearance" label="First & Last Appearance" onUpdateCharacter={onUpdateCharacter} placeholder="chapter/scene" />
-                    <EditableCharacterField character={item} field="actorVisualReference" label="Actor / Visual Reference" onUpdateCharacter={onUpdateCharacter} />
-                    <EditableCharacterField character={item} field="symbolicObjectsThemes" label="Symbolic Objects / Themes" onUpdateCharacter={onUpdateCharacter} />
-                    <EditableCharacterField character={item} field="evolutionNotes" label="Evolution Notes" onUpdateCharacter={onUpdateCharacter} placeholder="planned vs. realized arc" />
-                    <EditableCharacterField character={item} field="crossLinks" label="Cross-links" onUpdateCharacter={onUpdateCharacter} placeholder="Appears in: other books, timelines, etc." />
+            <CollapsibleSection title="Continuity Aids" defaultOpen={false} exportId="continuityAids" isExportable isIncludedInExport={item.exportConfig?.continuityAids ?? true} onToggleExport={handleToggleExport}>
+                <div className="space-y-4">
+                    <div><h3 className="text-sm font-semibold text-gray-400 mb-1">First & Last Appearance</h3><EditableCharacterField character={item} field="firstLastAppearance" onUpdateCharacter={onUpdateCharacter} placeholder="chapter/scene" /></div>
+                    <div><h3 className="text-sm font-semibold text-gray-400 mb-1">Actor / Visual Reference</h3><EditableCharacterField character={item} field="actorVisualReference" onUpdateCharacter={onUpdateCharacter} /></div>
+                    <div><h3 className="text-sm font-semibold text-gray-400 mb-1">Symbolic Objects / Themes</h3><EditableCharacterField character={item} field="symbolicObjectsThemes" onUpdateCharacter={onUpdateCharacter} /></div>
+                    <div><h3 className="text-sm font-semibold text-gray-400 mb-1">Evolution Notes</h3><EditableCharacterField character={item} field="evolutionNotes" onUpdateCharacter={onUpdateCharacter} placeholder="planned vs. realized arc" /></div>
+                    <div><h3 className="text-sm font-semibold text-gray-400 mb-1">Cross-links</h3><EditableCharacterField character={item} field="crossLinks" onUpdateCharacter={onUpdateCharacter} placeholder="Appears in: other books, timelines, etc." /></div>
                 </div>
             </CollapsibleSection>
 
-            <CollapsibleSection title="Optional Extras" defaultOpen={false}>
-                <div className="space-y-6">
-                    <EditableCharacterField character={item} field="innerMonologueExample" label="Inner Monologue Example" onUpdateCharacter={onUpdateCharacter} />
-                    <EditableCharacterField character={item} field="playlistSoundPalette" label="Character Playlist / Sound Palette" onUpdateCharacter={onUpdateCharacter} />
-                    <EditableCharacterField character={item} field="colorPaletteMotifs" label="Color Palette / Symbolic Motifs" onUpdateCharacter={onUpdateCharacter} />
-                    <EditableCharacterField character={item} field="aiGameReference" label="AI or Game Reference Data" onUpdateCharacter={onUpdateCharacter} placeholder="For transmedia or interactive formats" />
-                    <EditableCharacterField character={item} field="developmentNotes" label="Development Notes" onUpdateCharacter={onUpdateCharacter} placeholder="How the concept changed over drafts" />
+            <CollapsibleSection title="Optional Extras" defaultOpen={false} exportId="extras" isExportable isIncludedInExport={item.exportConfig?.extras ?? true} onToggleExport={handleToggleExport}>
+                <div className="space-y-4">
+                    <div><h3 className="text-sm font-semibold text-gray-400 mb-1">Inner Monologue Example</h3><EditableCharacterField character={item} field="innerMonologueExample" onUpdateCharacter={onUpdateCharacter} /></div>
+                    <div><h3 className="text-sm font-semibold text-gray-400 mb-1">Character Playlist / Sound Palette</h3><EditableCharacterField character={item} field="playlistSoundPalette" onUpdateCharacter={onUpdateCharacter} /></div>
+                    <div><h3 className="text-sm font-semibold text-gray-400 mb-1">Color Palette / Symbolic Motifs</h3><EditableCharacterField character={item} field="colorPaletteMotifs" onUpdateCharacter={onUpdateCharacter} /></div>
+                    <div><h3 className="text-sm font-semibold text-gray-400 mb-1">AI or Game Reference Data</h3><EditableCharacterField character={item} field="aiGameReference" onUpdateCharacter={onUpdateCharacter} placeholder="For transmedia or interactive formats" /></div>
+                    <div><h3 className="text-sm font-semibold text-gray-400 mb-1">Development Notes</h3><EditableCharacterField character={item} field="developmentNotes" onUpdateCharacter={onUpdateCharacter} placeholder="How the concept changed over drafts" /></div>
                 </div>
             </CollapsibleSection>
 
@@ -495,20 +533,32 @@ const OutlineView: React.FC<{
 };
 
 const NotesView: React.FC<{
-  notes: string;
+  project: Project;
   onUpdateNotes: (newNotes: string) => void;
-}> = ({ notes, onUpdateNotes }) => {
-  const [currentNotes, setCurrentNotes] = useState(notes);
+  onToggleNotesExport: () => void;
+}> = ({ project, onUpdateNotes, onToggleNotesExport }) => {
+  const [currentNotes, setCurrentNotes] = useState(project.notes);
   const wordCount = (currentNotes || '').trim().split(/\s+/).filter(Boolean).length;
 
   useEffect(() => {
     // Sync local state when the project changes
-    setCurrentNotes(notes);
-  }, [notes]);
+    setCurrentNotes(project.notes);
+  }, [project.notes]);
   
   return (
     <>
-      <h1 className="text-4xl font-bold text-cyan-300 mb-4">Notes</h1>
+      <div className="flex items-center justify-between mb-4">
+        <h1 className="text-4xl font-bold text-cyan-300">Notes</h1>
+        <label className="flex items-center text-sm text-gray-400 cursor-pointer">
+            <input
+                type="checkbox"
+                checked={project.exportNotes ?? true}
+                onChange={onToggleNotesExport}
+                className="mr-2 form-checkbox h-4 w-4 bg-gray-700 border-gray-500 rounded text-cyan-500 focus:ring-cyan-600"
+            />
+            Include in export
+        </label>
+      </div>
       <p className="text-gray-400 mb-6">A scratchpad for your unstructured thoughts, ideas, and snippets of research.</p>
       <div className="relative h-[70vh]">
         <textarea
@@ -527,11 +577,11 @@ const NotesView: React.FC<{
   );
 };
 
-const MainContent: React.FC<MainContentProps> = ({ item, project, activeTab, onUpdateOutlineContent, onUpdateCharacter, onDeleteCharacterRequest, onUpdateNotes, onToggleCharacterAssociation, onConsistencyCheck, onGenerateCharacterImage, isGeneratingImage, onGenerateIllustration, isGeneratingIllustration, onDeleteCharacterImage, onDeleteIllustration }) => {
+const MainContent: React.FC<MainContentProps> = ({ item, project, activeTab, onUpdateOutlineContent, onUpdateCharacter, onDeleteCharacterRequest, onUpdateNotes, onToggleNotesExport, onToggleCharacterAssociation, onConsistencyCheck, onGenerateCharacterImage, isGeneratingImage, onGenerateIllustration, isGeneratingIllustration, onDeleteCharacterImage, onDeleteIllustration }) => {
   if (activeTab === 'notes') {
     return (
         <main className="flex-1 p-10 overflow-y-auto bg-gray-900">
-            <NotesView notes={project.notes} onUpdateNotes={onUpdateNotes} />
+            <NotesView project={project} onUpdateNotes={onUpdateNotes} onToggleNotesExport={onToggleNotesExport} />
         </main>
     );
   }

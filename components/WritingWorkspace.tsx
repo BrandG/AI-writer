@@ -91,6 +91,19 @@ const toggleCharacterAssociationRecursively = (sections: OutlineSection[], secti
     });
 };
 
+// Recursive helper to toggle export status
+const toggleExportRecursively = (sections: OutlineSection[], sectionId: string): OutlineSection[] => {
+    return sections.map(section => {
+        if (section.id === sectionId) {
+            return { ...section, includeInExport: !(section.includeInExport ?? true) };
+        }
+        if (section.children) {
+            return { ...section, children: toggleExportRecursively(section.children, sectionId) };
+        }
+        return section;
+    });
+};
+
 interface WritingWorkspaceProps {
   project: Project;
   onBack: () => void;
@@ -210,6 +223,7 @@ const WritingWorkspace: React.FC<WritingWorkspaceProps> = ({ project, onBack, on
             content: content || '',
             type: 'outline',
             children: [],
+            includeInExport: true,
         };
 
         setCurrentProject(prevProject => {
@@ -242,6 +256,13 @@ const WritingWorkspace: React.FC<WritingWorkspaceProps> = ({ project, onBack, on
             return prev;
         });
         return { success: true, message: `Section updated successfully.` };
+    };
+
+    const handleToggleOutlineExport = (sectionId: string) => {
+        setCurrentProject(prevProject => {
+            const newOutline = toggleExportRecursively(prevProject.outline, sectionId);
+            return { ...prevProject, outline: newOutline };
+        });
     };
 
     const handleDeleteOutlineSection = (args: { sectionId: string }) => {
@@ -411,6 +432,10 @@ const WritingWorkspace: React.FC<WritingWorkspaceProps> = ({ project, onBack, on
 
     const handleUpdateNotes = (newNotes: string) => {
         setCurrentProject(prev => ({ ...prev, notes: newNotes }));
+    };
+
+    const handleToggleNotesExport = () => {
+        setCurrentProject(prev => ({ ...prev, exportNotes: !(prev.exportNotes ?? true) }));
     };
 
     // AI Tool Handlers
@@ -682,6 +707,7 @@ const WritingWorkspace: React.FC<WritingWorkspaceProps> = ({ project, onBack, on
             onSelectItem={handleSelectItem}
             onBack={onBack}
             onUpdateOutlineTitle={handleUpdateOutlineTitle}
+            onToggleOutlineExport={handleToggleOutlineExport}
             onAddSubItem={(parentId) => handleAddOutlineSection({ parentId, title: "New Section"})}
             onAddRootItem={() => handleAddOutlineSection({ title: "New Section"})}
             onDeleteOutlineSection={(sectionId) => handleDeleteOutlineSection({ sectionId })}
@@ -702,6 +728,7 @@ const WritingWorkspace: React.FC<WritingWorkspaceProps> = ({ project, onBack, on
             onUpdateCharacter={handleUpdateCharacter}
             onDeleteCharacterRequest={(character) => setCharacterToDelete(character)}
             onUpdateNotes={handleUpdateNotes}
+            onToggleNotesExport={handleToggleNotesExport}
             onToggleCharacterAssociation={(sectionId, characterId) => {
                 setCurrentProject(prevProject => ({
                     ...prevProject,

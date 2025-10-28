@@ -13,6 +13,7 @@ interface LeftSidebarProps {
   onSelectItem: (item: SelectableItem) => void;
   onBack: () => void;
   onUpdateOutlineTitle: (id: string, newTitle: string) => void;
+  onToggleOutlineExport: (id: string) => void;
   onAddSubItem: (parentId: string) => void;
   onAddRootItem: () => void;
   onDeleteOutlineSection: (id: string) => void;
@@ -73,6 +74,7 @@ interface OutlineItemProps {
     selectedItem: SelectableItem | null;
     onSelectItem: (item: SelectableItem) => void;
     onUpdateOutlineTitle: (id: string, newTitle: string) => void;
+    onToggleOutlineExport: (id: string) => void;
     onAddSubItem: (parentId: string) => void;
     onDeleteOutlineSection: (id: string) => void;
     draggedItemId: string | null;
@@ -83,7 +85,7 @@ interface OutlineItemProps {
 }
 
 const OutlineItem: React.FC<OutlineItemProps> = ({
-    item, level, selectedItem, onSelectItem, onUpdateOutlineTitle, onAddSubItem, onDeleteOutlineSection,
+    item, level, selectedItem, onSelectItem, onUpdateOutlineTitle, onToggleOutlineExport, onAddSubItem, onDeleteOutlineSection,
     draggedItemId, setDraggedItemId, dragOverInfo, setDragOverInfo, onReorderOutline
 }) => {
     const [isOpen, setIsOpen] = useState(true);
@@ -193,17 +195,26 @@ const OutlineItem: React.FC<OutlineItemProps> = ({
                 style={{ paddingLeft: `${level * 1.5}rem` }}
             >
                 <div className="flex items-center flex-grow min-w-0">
+                    <input
+                        type="checkbox"
+                        checked={item.includeInExport ?? true}
+                        onChange={() => onToggleOutlineExport(item.id)}
+                        onClick={(e) => e.stopPropagation()}
+                        aria-label={`Include ${item.title} in export`}
+                        title="Include in export"
+                        className="ml-1 form-checkbox h-4 w-4 bg-gray-600 border-gray-500 rounded text-cyan-500 focus:ring-cyan-600 cursor-pointer"
+                    />
                     {hasChildren ? (
                         <button
                             onClick={() => setIsOpen(!isOpen)}
                             aria-expanded={isOpen}
                             aria-label={isOpen ? `Collapse ${item.title}` : `Expand ${item.title}`}
-                            className="p-1 rounded-full hover:bg-gray-600 text-gray-400 mr-1 flex-shrink-0"
+                            className="p-1 rounded-full hover:bg-gray-600 text-gray-400 ml-1 flex-shrink-0"
                         >
                             <ChevronDownIcon className={`h-4 w-4 transition-transform duration-200 ${isOpen ? 'rotate-0' : '-rotate-90'}`} />
                         </button>
                     ) : (
-                        <div className="w-6 mr-1 flex-shrink-0"></div>
+                        <div className="w-6 ml-1 flex-shrink-0"></div>
                     )}
                     <input
                       type="text"
@@ -260,6 +271,7 @@ const OutlineItem: React.FC<OutlineItemProps> = ({
                             selectedItem={selectedItem}
                             onSelectItem={onSelectItem}
                             onUpdateOutlineTitle={onUpdateOutlineTitle}
+                            onToggleOutlineExport={onToggleOutlineExport}
                             onAddSubItem={onAddSubItem}
                             onDeleteOutlineSection={onDeleteOutlineSection}
                             draggedItemId={draggedItemId}
@@ -276,7 +288,7 @@ const OutlineItem: React.FC<OutlineItemProps> = ({
 };
 
 
-const LeftSidebar: React.FC<LeftSidebarProps> = ({ project, activeTab, setActiveTab, selectedItem, onSelectItem, onBack, onUpdateOutlineTitle, onAddSubItem, onAddRootItem, onDeleteOutlineSection, onReorderOutline, saveStatus }) => {
+const LeftSidebar: React.FC<LeftSidebarProps> = ({ project, activeTab, setActiveTab, selectedItem, onSelectItem, onBack, onUpdateOutlineTitle, onToggleOutlineExport, onAddSubItem, onAddRootItem, onDeleteOutlineSection, onReorderOutline, saveStatus }) => {
   const [draggedItemId, setDraggedItemId] = useState<string | null>(null);
   const [dragOverInfo, setDragOverInfo] = useState<DragOverInfo | null>(null);
 
@@ -334,6 +346,7 @@ const LeftSidebar: React.FC<LeftSidebarProps> = ({ project, activeTab, setActive
                             selectedItem={selectedItem}
                             onSelectItem={onSelectItem}
                             onUpdateOutlineTitle={onUpdateOutlineTitle}
+                            onToggleOutlineExport={onToggleOutlineExport}
                             onAddSubItem={onAddSubItem}
                             onDeleteOutlineSection={onDeleteOutlineSection}
                             draggedItemId={draggedItemId}
