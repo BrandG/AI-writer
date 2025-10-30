@@ -1,5 +1,5 @@
 import React, { useState, useCallback, useEffect, useRef } from 'react';
-import { Project, SelectableItem, OutlineSection, Character, ChatMessage, AiService } from '../types';
+import { Project, SelectableItem, OutlineSection, Character, ChatMessage, AiService, Note } from '../types';
 import LeftSidebar from './LeftSidebar';
 import MainContent from './MainContent';
 import ChatSidebar from './ChatSidebar';
@@ -127,6 +127,7 @@ const WritingWorkspace: React.FC<WritingWorkspaceProps> = ({ project, onBack, on
   const [isGeneratingIllustration, setIsGeneratingIllustration] = useState(false);
   const [saveStatus, setSaveStatus] = useState<SaveStatus>('saved');
   const [characterToDelete, setCharacterToDelete] = useState<Character | null>(null);
+  const [noteToDelete, setNoteToDelete] = useState<Note | null>(null);
   
   // Track the current project ID to differentiate between a project switch and a data update.
   const [currentProjectId, setCurrentProjectId] = useState<string>(project.id);
@@ -178,9 +179,14 @@ const WritingWorkspace: React.FC<WritingWorkspaceProps> = ({ project, onBack, on
     if (project.id !== currentProjectId) {
       setCurrentProjectId(project.id); // Track the new ID
       setCurrentProject(project);
-      const initialSelectedItem = project.outline[0] || project.characters[0] || null;
+      const initialSelectedItem = project.outline[0] || project.characters[0] || project.notes[0] || null;
       setSelectedItem(initialSelectedItem);
-      setActiveTab(initialSelectedItem?.type === 'character' ? 'characters' : 'outline');
+      
+      let initialTab: ActiveTab = 'outline';
+      if (initialSelectedItem?.type === 'character') initialTab = 'characters';
+      if (initialSelectedItem?.type === 'note') initialTab = 'notes';
+      setActiveTab(initialTab);
+
       const initialMessage = { role: 'model' as const, text: `Hello! How can I help you with '${project.title}' today?` };
       setMessages([initialMessage]);
       setConversationHistory([{ role: 'assistant', content: initialMessage.text }]);
@@ -193,6 +199,17 @@ const WritingWorkspace: React.FC<WritingWorkspaceProps> = ({ project, onBack, on
       setCurrentProject(project);
     }
   }, [project, currentProjectId]);
+
+  const handleSetTab = useCallback((tab: ActiveTab) => {
+    setActiveTab(tab);
+    if (tab === 'notes' && (selectedItem?.type !== 'note' || !selectedItem)) {
+        setSelectedItem(currentProject.notes[0] || null);
+    } else if (tab === 'characters' && (selectedItem?.type !== 'character' || !selectedItem)) {
+        setSelectedItem(currentProject.characters[0] || null);
+    } else if (tab === 'outline' && (selectedItem?.type !== 'outline' || !selectedItem)) {
+        setSelectedItem(currentProject.outline[0] || null);
+    }
+  }, [currentProject, selectedItem]);
 
   const handleSelectItem = useCallback((item: SelectableItem) => {
     setSelectedItem(item);
@@ -370,7 +387,7 @@ const WritingWorkspace: React.FC<WritingWorkspaceProps> = ({ project, onBack, on
         return { success: true, message: 'Section moved successfully.' };
     };
     
-    // Character Handlers (used by AI tools and MainContent)
+    // Character Handlers
     const handleAddCharacter = (args: Omit<Character, 'id' | 'type'>) => {
         const newCharacter: Character = {
             ...args,
@@ -429,13 +446,46 @@ const WritingWorkspace: React.FC<WritingWorkspaceProps> = ({ project, onBack, on
         });
         return { success: true, message: "Character deleted successfully." };
     };
-
-    const handleUpdateNotes = (newNotes: string) => {
-        setCurrentProject(prev => ({ ...prev, notes: newNotes }));
+    
+    // Note Handlers
+    const handleAddNote = () => {
+        const newNote: Note = {
+            id: uuidv4(),
+            type: 'note',
+            title: 'New Note',
+            content: '',
+            includeInExport: true,
+        };
+        setCurrentProject(prev => ({
+            ...prev,
+            notes: [...prev.notes, newNote],
+        }));
+        setSelectedItem(newNote);
     };
 
-    const handleToggleNotesExport = () => {
-        setCurrentProject(prev => ({ ...prev, exportNotes: !(prev.exportNotes ?? true) }));
+    const handleUpdateNote = (noteId: string, updates: Partial<Note>) => {
+        setCurrentProject(prev => ({
+            ...prev,
+            notes: prev.notes.map(n => n.id === noteId ? { ...n, ...updates } : n),
+        }));
+
+        setSelectedItem(prev => {
+            if (prev?.id === noteId && prev.type === 'note') {
+                return { ...prev, ...updates };
+            }
+            return prev;
+        });
+    };
+
+    const handleDeleteNote = (noteId: string) => {
+        setCurrentProject(prev => {
+            const newNotes = prev.notes.filter(n => n.id !== noteId);
+            if (selectedItem?.id === noteId) {
+                // If the deleted note was selected, select the first available note or null
+                setSelectedItem(newNotes[0] || null);
+            }
+            return { ...prev, notes: newNotes };
+        });
     };
 
     // AI Tool Handlers
@@ -699,10 +749,27 @@ const WritingWorkspace: React.FC<WritingWorkspaceProps> = ({ project, onBack, on
             </p>
         </ConfirmModal>
 
+         <ConfirmModal
+            isOpen={!!noteToDelete}
+            onClose={() => setNoteToDelete(null)}
+            onConfirm={() => {
+                if (noteToDelete) {
+                    handleDeleteNote(noteToDelete.id);
+                    setNoteToDelete(null);
+                }
+            }}
+            title="Confirm Note Deletion"
+            confirmButtonText="Delete Note"
+        >
+            <p>
+                Are you sure you want to permanently delete the note <strong className="font-semibold text-white">"{noteToDelete?.title || ''}"</strong>? This action cannot be undone.
+            </p>
+        </ConfirmModal>
+
         <LeftSidebar 
             project={currentProject}
             activeTab={activeTab}
-            setActiveTab={setActiveTab}
+            setActiveTab={handleSetTab}
             selectedItem={selectedItem}
             onSelectItem={handleSelectItem}
             onBack={onBack}
@@ -718,6 +785,8 @@ const WritingWorkspace: React.FC<WritingWorkspaceProps> = ({ project, onBack, on
                     handleMoveOutlineSection({ sectionId: draggedId, targetSiblingId: targetId, position: position === 'above' ? 'before' : 'after' });
                 }
             }}
+            onAddNote={handleAddNote}
+            onDeleteNoteRequest={(note) => setNoteToDelete(note)}
             saveStatus={saveStatus}
         />
         <MainContent 
@@ -727,8 +796,8 @@ const WritingWorkspace: React.FC<WritingWorkspaceProps> = ({ project, onBack, on
             onUpdateOutlineContent={(sectionId, newContent) => handleUpdateOutlineSection({ sectionId, newContent })}
             onUpdateCharacter={handleUpdateCharacter}
             onDeleteCharacterRequest={(character) => setCharacterToDelete(character)}
-            onUpdateNotes={handleUpdateNotes}
-            onToggleNotesExport={handleToggleNotesExport}
+            onUpdateNote={handleUpdateNote}
+            onDeleteNoteRequest={(note) => setNoteToDelete(note)}
             onToggleCharacterAssociation={(sectionId, characterId) => {
                 setCurrentProject(prevProject => ({
                     ...prevProject,

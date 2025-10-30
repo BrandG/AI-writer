@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Project, SelectableItem, OutlineSection, Character } from '../types';
+import { Project, SelectableItem, OutlineSection, Character, Note } from '../types';
 import { ActiveTab } from './WritingWorkspace';
 import { getImage } from '../services/imageDbService';
 import Dropdown from './Dropdown';
@@ -12,8 +12,8 @@ interface MainContentProps {
   onUpdateOutlineContent: (sectionId: string, newContent: string) => void;
   onUpdateCharacter: (characterId: string, updatedData: Partial<Character>) => void;
   onDeleteCharacterRequest: (character: Character) => void;
-  onUpdateNotes: (newNotes: string) => void;
-  onToggleNotesExport: () => void;
+  onUpdateNote: (noteId: string, updates: Partial<Note>) => void;
+  onDeleteNoteRequest: (note: Note) => void;
   onToggleCharacterAssociation: (sectionId: string, characterId: string) => void;
   onConsistencyCheck: (section: OutlineSection) => void;
   onGenerateCharacterImage: (characterId: string) => void;
@@ -532,28 +532,34 @@ const OutlineView: React.FC<{
   );
 };
 
-const NotesView: React.FC<{
-  project: Project;
-  onUpdateNotes: (newNotes: string) => void;
-  onToggleNotesExport: () => void;
-}> = ({ project, onUpdateNotes, onToggleNotesExport }) => {
-  const [currentNotes, setCurrentNotes] = useState(project.notes);
-  const wordCount = (currentNotes || '').trim().split(/\s+/).filter(Boolean).length;
+const NoteView: React.FC<{
+  item: Note;
+  onUpdateNote: (noteId: string, updates: Partial<Note>) => void;
+  onDeleteNoteRequest: (note: Note) => void;
+}> = ({ item, onUpdateNote, onDeleteNoteRequest }) => {
+  const [content, setContent] = useState(item.content);
+  const wordCount = (content || '').trim().split(/\s+/).filter(Boolean).length;
 
   useEffect(() => {
     // Sync local state when the project changes
-    setCurrentNotes(project.notes);
-  }, [project.notes]);
+    setContent(item.content);
+  }, [item.id, item.content]);
   
   return (
     <>
-      <div className="flex items-center justify-between mb-4">
-        <h1 className="text-4xl font-bold text-cyan-300">Notes</h1>
+      <div className="flex items-center justify-between mb-4 flex-wrap gap-4">
+        <input
+            key={`${item.id}-title`}
+            defaultValue={item.title}
+            onBlur={(e) => e.target.value.trim() && onUpdateNote(item.id, { title: e.target.value.trim() })}
+            aria-label="Note title"
+            className="text-4xl font-bold text-cyan-300 bg-transparent rounded-md p-2 -m-2 focus:outline-none focus:bg-gray-800 focus:ring-2 focus:ring-cyan-500"
+        />
         <label className="flex items-center text-sm text-gray-400 cursor-pointer">
             <input
                 type="checkbox"
-                checked={project.exportNotes ?? true}
-                onChange={onToggleNotesExport}
+                checked={item.includeInExport ?? true}
+                onChange={() => onUpdateNote(item.id, { includeInExport: !(item.includeInExport ?? true) })}
                 className="mr-2 form-checkbox h-4 w-4 bg-gray-700 border-gray-500 rounded text-cyan-500 focus:ring-cyan-600"
             />
             Include in export
@@ -562,9 +568,10 @@ const NotesView: React.FC<{
       <p className="text-gray-400 mb-6">A scratchpad for your unstructured thoughts, ideas, and snippets of research.</p>
       <div className="relative h-[70vh]">
         <textarea
-            value={currentNotes}
-            onChange={(e) => setCurrentNotes(e.target.value)}
-            onBlur={() => onUpdateNotes(currentNotes)}
+            key={item.id}
+            value={content}
+            onChange={(e) => setContent(e.target.value)}
+            onBlur={() => onUpdateNote(item.id, { content })}
             placeholder="Jot down your ideas here..."
             aria-label="Project notes"
             className="w-full h-full bg-gray-800 border border-gray-700 rounded-md p-6 pb-8 text-gray-300 leading-relaxed focus:outline-none focus:ring-2 focus:ring-cyan-500 transition-shadow"
@@ -573,39 +580,52 @@ const NotesView: React.FC<{
             {wordCount} {wordCount === 1 ? 'word' : 'words'}
         </div>
       </div>
+       <div className="mt-8 pt-6 border-t border-gray-700">
+            <button
+                onClick={() => onDeleteNoteRequest(item)}
+                className="w-full max-w-xs mx-auto flex items-center justify-center p-3 rounded-md text-sm bg-transparent border border-red-500/50 text-red-400 hover:bg-red-500/20 hover:text-red-300 font-semibold transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-red-500"
+                aria-label={`Delete note ${item.title}`}
+            >
+                <TrashIcon className="h-5 w-5 mr-2" />
+                Delete Note
+            </button>
+        </div>
     </>
   );
 };
 
-const MainContent: React.FC<MainContentProps> = ({ item, project, activeTab, onUpdateOutlineContent, onUpdateCharacter, onDeleteCharacterRequest, onUpdateNotes, onToggleNotesExport, onToggleCharacterAssociation, onConsistencyCheck, onGenerateCharacterImage, isGeneratingImage, onGenerateIllustration, isGeneratingIllustration, onDeleteCharacterImage, onDeleteIllustration }) => {
-  if (activeTab === 'notes') {
-    return (
-        <main className="flex-1 p-10 overflow-y-auto bg-gray-900">
-            <NotesView project={project} onUpdateNotes={onUpdateNotes} onToggleNotesExport={onToggleNotesExport} />
-        </main>
-    );
-  }
-  
-  if (!item) {
-    return (
-      <main className="flex-1 p-8 flex items-center justify-center">
-        <p className="text-gray-500">Select an item from the sidebar to view its details.</p>
-      </main>
-    );
-  }
+const MainContent: React.FC<MainContentProps> = ({ item, project, activeTab, onUpdateOutlineContent, onUpdateCharacter, onDeleteCharacterRequest, onUpdateNote, onDeleteNoteRequest, onToggleCharacterAssociation, onConsistencyCheck, onGenerateCharacterImage, isGeneratingImage, onGenerateIllustration, isGeneratingIllustration, onDeleteCharacterImage, onDeleteIllustration }) => {
+  const renderContent = () => {
+    if (activeTab === 'notes') {
+        if (item?.type === 'note') {
+            return <NoteView item={item} onUpdateNote={onUpdateNote} onDeleteNoteRequest={onDeleteNoteRequest} />;
+        }
+        return <p className="text-gray-500">Select a note from the sidebar, or create a new one.</p>;
+    }
 
-  return (
-    <main className="flex-1 p-10 overflow-y-auto bg-gray-900">
-        {item.type === 'character' 
-          ? <CharacterView 
+    if (!item) {
+        let message = 'Select an item from the sidebar to view its details.';
+        if (activeTab === 'characters' && project.characters.length === 0) {
+            message = 'No characters in this project yet. Add one using the AI Assistant!';
+        } else if (activeTab === 'outline' && project.outline.length === 0) {
+            message = 'This project has no outline. Add a section to get started.';
+        }
+        return <p className="text-gray-500">{message}</p>;
+    }
+  
+    if (item.type === 'character') {
+      return <CharacterView 
               item={item}
               onGenerateImage={onGenerateCharacterImage}
               onDeleteImage={onDeleteCharacterImage}
               isGeneratingImage={isGeneratingImage}
               onUpdateCharacter={onUpdateCharacter}
               onDeleteCharacterRequest={onDeleteCharacterRequest}
-            /> 
-          : <OutlineView 
+            />;
+    }
+    
+    if (item.type === 'outline') {
+      return <OutlineView 
               item={item} 
               project={project}
               onUpdateOutlineContent={onUpdateOutlineContent}
@@ -614,8 +634,15 @@ const MainContent: React.FC<MainContentProps> = ({ item, project, activeTab, onU
               onGenerateIllustration={onGenerateIllustration}
               onDeleteIllustration={onDeleteIllustration}
               isGeneratingIllustration={isGeneratingIllustration}
-            />
-        }
+            />;
+    }
+
+    return null;
+  };
+
+  return (
+    <main className="flex-1 p-10 overflow-y-auto bg-gray-900">
+        {renderContent()}
     </main>
   );
 };

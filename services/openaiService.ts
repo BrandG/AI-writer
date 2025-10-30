@@ -1,5 +1,5 @@
 import OpenAI from "openai";
-import { Project, ChatMessage, SelectableItem, OutlineSection, Character, UnifiedAIResponse, AiService } from '../types';
+import { Project, ChatMessage, SelectableItem, OutlineSection, Character, UnifiedAIResponse, AiService, Note } from '../types';
 import { v4 as uuidv4 } from 'uuid';
 
 // Define the tools (functions) the AI can call, in OpenAI's format
@@ -196,8 +196,11 @@ function formatProjectContext(project: Project, selectedItem: SelectableItem | n
     context += `\nOUTLINE (with IDs for targeting):\n`;
     context += formatOutlineWithIds(project.outline);
 
-    context += `\nPROJECT NOTES / SCRATCHPAD:\n`;
-    context += `${project.notes || 'No notes yet.'}\n\n`;
+    context += `\nPROJECT NOTES (with IDs for targeting):\n`;
+    project.notes.forEach(note => {
+        context += `- ${note.title} (ID: ${note.id})\n`;
+    });
+    context += '\n\n';
 
     if (selectedItem) {
         context += `\nCURRENTLY VIEWING:\n`;
@@ -205,8 +208,10 @@ function formatProjectContext(project: Project, selectedItem: SelectableItem | n
             const char = selectedItem as Character;
             context += `Character: ${char.name} (ID: ${char.id})\n`;
             context += `Full Profile: ${JSON.stringify(char, null, 2)}\n`;
-        } else {
+        } else if (selectedItem.type === 'outline') {
             context += `Outline Section: ${selectedItem.title} (ID: ${selectedItem.id})\nContent: ${selectedItem.content}\n`;
+        } else if (selectedItem.type === 'note') {
+            context += `Note: ${selectedItem.title} (ID: ${selectedItem.id})\nContent: ${selectedItem.content}\n`;
         }
     }
     return context;
@@ -430,7 +435,7 @@ const generateInitialProjectData = async (
     title: string,
     genre: string,
     description: string
-): Promise<{ outline: OutlineSection[], characters: Character[], notes: string }> => {
+): Promise<{ outline: OutlineSection[], characters: Character[], notes: Note[] }> => {
     if (!process.env.OPENAI_API_KEY) {
         throw new Error("AI is disabled. OpenAI API key is missing.");
     }
@@ -438,7 +443,7 @@ const generateInitialProjectData = async (
     
     const systemInstruction = `You are an expert story structure consultant and writer. Based on the provided project pitch, generate a foundational story outline, a list of 2-3 key characters, and some initial notes.
 The outline should follow a standard narrative structure (e.g., Three-Act Structure). The characters should be compelling.
-**You must respond with a JSON object that contains 'characters', 'outline', and 'notes' keys.** The structure should match the user's request.`;
+**You must respond with a JSON object that contains 'characters', 'outline', and 'notes' keys.** The 'notes' key should contain an array of note objects, each with a 'title' and 'content'. The structure should match the user's request.`;
     
     const userPrompt = `
 Project Title: ${title}
@@ -480,7 +485,13 @@ For each character, please fill out all of the following fields, being as creati
             children: [],
         }));
         
-        return { characters, outline, notes: jsonResponse.notes || '' };
+        const notes = jsonResponse.notes.map((note: Omit<Note, 'id' | 'type'>) => ({
+            ...note,
+            id: uuidv4(),
+            type: 'note' as const,
+        }));
+        
+        return { characters, outline, notes: notes || [] };
 
     } catch (error) {
         console.error("Error generating initial project data with OpenAI:", error);

@@ -1,5 +1,5 @@
 import { GoogleGenAI, Type, FunctionDeclaration, GenerateContentResponse } from "@google/genai";
-import { Project, SelectableItem, OutlineSection, Character, UnifiedAIResponse, AiService } from '../types';
+import { Project, SelectableItem, OutlineSection, Character, UnifiedAIResponse, AiService, Note } from '../types';
 import { v4 as uuidv4 } from 'uuid';
 import OpenAI from "openai"; // Using OpenAI types for conversation history for compatibility
 
@@ -91,8 +91,11 @@ function formatProjectContext(project: Project, selectedItem: SelectableItem | n
     context += `\nOUTLINE (with IDs for targeting):\n`;
     context += formatOutlineWithIds(project.outline);
 
-    context += `\nPROJECT NOTES / SCRATCHPAD:\n`;
-    context += `${project.notes || 'No notes yet.'}\n\n`;
+    context += `\nPROJECT NOTES (with IDs for targeting):\n`;
+    project.notes.forEach(note => {
+        context += `- ${note.title} (ID: ${note.id})\n`;
+    });
+    context += '\n\n';
 
     if (selectedItem) {
         context += `\nCURRENTLY VIEWING:\n`;
@@ -100,8 +103,10 @@ function formatProjectContext(project: Project, selectedItem: SelectableItem | n
             const char = selectedItem as Character;
             context += `Character: ${char.name} (ID: ${char.id})\n`;
             context += `Full Profile: ${JSON.stringify(char, null, 2)}\n`;
-        } else {
+        } else if (selectedItem.type === 'outline') {
             context += `Outline Section: ${selectedItem.title} (ID: ${selectedItem.id})\nContent: ${selectedItem.content}\n`;
+        } else if (selectedItem.type === 'note') {
+            context += `Note: ${selectedItem.title} (ID: ${selectedItem.id})\nContent: ${selectedItem.content}\n`;
         }
     }
     return context;
@@ -450,7 +455,7 @@ const generateInitialProjectData = async (
     title: string,
     genre: string,
     description: string
-): Promise<{ outline: OutlineSection[], characters: Character[], notes: string }> => {
+): Promise<{ outline: OutlineSection[], characters: Character[], notes: Note[] }> => {
     if (!process.env.API_KEY) {
         throw new Error("AI is disabled. Google API key is missing.");
     }
@@ -465,7 +470,7 @@ Please generate the initial characters, outline, and notes for this project.
 Follow the provided JSON schema precisely.
 For each character, be as creative and detailed as possible when filling out all fields.
 The outline should follow a standard narrative structure (e.g., Three-Act Structure).
-The notes section should contain some initial ideas, potential plot points, or questions to explore.`;
+The notes section should contain a few notes, each with a title and content, for initial ideas, potential plot points, or questions to explore.`;
 
     // Define all character fields for the schema
     const characterProperties = {
@@ -549,8 +554,16 @@ The notes section should contain some initial ideas, potential plot points, or q
                             }
                         },
                         notes: {
-                            type: Type.STRING,
-                            description: "A scratchpad for initial ideas, plot points, or research notes."
+                            type: Type.ARRAY,
+                            description: "A scratchpad for initial ideas, plot points, or research notes, organized into separate notes.",
+                            items: {
+                                type: Type.OBJECT,
+                                properties: {
+                                    title: { type: Type.STRING },
+                                    content: { type: Type.STRING }
+                                },
+                                required: ['title', 'content']
+                            }
                         }
                     },
                     required: ['characters', 'outline', 'notes']
@@ -566,8 +579,11 @@ The notes section should contain some initial ideas, potential plot points, or q
         const outline = jsonResponse.outline.map((section: Omit<OutlineSection, 'id' | 'type'>) => ({
             ...section, id: uuidv4(), type: 'outline' as const, children: [],
         }));
+        const notes = jsonResponse.notes.map((note: Omit<Note, 'id' | 'type'>) => ({
+            ...note, id: uuidv4(), type: 'note' as const
+        }));
         
-        return { characters, outline, notes: jsonResponse.notes || '' };
+        return { characters, outline, notes: notes || [] };
 
     } catch (error) {
         console.error("Error generating initial project data with Gemini:", error);

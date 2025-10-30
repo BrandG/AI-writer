@@ -65,6 +65,14 @@ export interface OutlineSection {
   includeInExport?: boolean;
 }
 
+export interface Note {
+  id: string;
+  title: string;
+  content: string;
+  type: 'note';
+  includeInExport?: boolean;
+}
+
 export interface Project {
   id: string;
   title: string;
@@ -72,8 +80,7 @@ export interface Project {
   description: string;
   outline: OutlineSection[];
   characters: Character[];
-  notes: string;
-  exportNotes?: boolean;
+  notes: Note[];
 }
 
 export interface ChatMessage {
@@ -81,7 +88,7 @@ export interface ChatMessage {
     text: string;
 }
 
-export type SelectableItem = Character | OutlineSection;
+export type SelectableItem = Character | OutlineSection | Note;
 
 export type AiProvider = 'openai' | 'gemini';
 
@@ -97,7 +104,7 @@ export interface UnifiedAIResponse {
 }
 
 export interface AiService {
-    generateInitialProjectData: (title: string, genre: string, description: string) => Promise<{ outline: OutlineSection[], characters: Character[], notes: string }>;
+    generateInitialProjectData: (title: string, genre: string, description: string) => Promise<{ outline: OutlineSection[], characters: Character[], notes: Note[] }>;
     getAIResponse: (conversationHistory: OpenAI.Chat.Completions.ChatCompletionMessageParam[], project: Project, selectedItem: SelectableItem | null) => Promise<UnifiedAIResponse>;
     getConsistencyCheckResponse: (section: OutlineSection, characters: Character[]) => Promise<string>;
     generateCharacterImage: (character: Character) => Promise<string>;

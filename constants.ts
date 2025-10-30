@@ -6,13 +6,14 @@ export const PROJECTS_DATA: Project[] = [
     title: 'Chronoscape: Echoes of Aethel',
     genre: 'Sci-Fi Epic',
     description: 'In a future where humanity has colonized the stars, a renegade historian discovers a temporal anomaly that threatens to unravel reality itself.',
-    notes: `## Ideas & Scratchpad
-
-- What if the "Helios Incident" wasn't sabotage but a natural temporal paradox Kaelen stumbled upon? Could make his obsession more tragic.
-- Rostova's backstory: Maybe the civilian casualties were on a colony world where her own family lived. This would give her a much stronger personal motivation to question the Concordance.
-- Possible names for the alien race that created the weapon: The Chronovores? The Weavers? The Architects?
-- The anomaly shouldn't just be a "hole in time." It should actively rewrite events, causing confusion and memory lapses for the characters. Imagine Kaelen and Rostova remembering different versions of the same event.
-`,
+    notes: [
+      {
+        id: 'note-1-1',
+        type: 'note',
+        title: 'Ideas & Scratchpad',
+        content: `- What if the "Helios Incident" wasn't sabotage but a natural temporal paradox Kaelen stumbled upon? Could make his obsession more tragic.\n- Rostova's backstory: Maybe the civilian casualties were on a colony world where her own family lived. This would give her a much stronger personal motivation to question the Concordance.\n- Possible names for the alien race that created the weapon: The Chronovores? The Weavers? The Architects?\n- The anomaly shouldn't just be a "hole in time." It should actively rewrite events, causing confusion and memory lapses for the characters. Imagine Kaelen and Rostova remembering different versions of the same event.`
+      }
+    ],
     characters: [
       {
         id: 'char-1-1',
@@ -129,16 +130,20 @@ export const PROJECTS_DATA: Project[] = [
     title: 'The Serpent\'s Shadow',
     genre: 'Fantasy Mystery',
     description: 'In the gaslit city of Silverwood, a magically-gifted detective must solve a series of ritualistic murders tied to a forgotten dark god.',
-    notes: `### Clues & Red Herrings
-- The first victim had a small, silver serpent pin on his lapel, but it was from a well-known jeweler, not the cult. (Red Herring)
-- All victims visited the same rare book shop in the week before their death. The shopkeeper is nervous and evasive. (Clue)
-- A strange, sweet-smelling incense is found at every crime scene. What is it? -> Leads to a specific black market apothecary.
-- Rumors of a 'Whispering Man' in the docks area. Is he connected or just city gossip?
-
-### Dialogue Snippets
-- Elias to Lyra: "Everyone in this city has a price, Lyra. The trick is knowing the currency. Yours is secrets. His is power. Mine... mine is just getting through the day without another ghost whispering in my ear."
-- Captain Isolde to Elias: "I don't approve of your methods, Thorne. But I can't deny your results. Just... try not to burn the city down while you're at it."
-`,
+    notes: [
+      {
+        id: 'note-2-1',
+        type: 'note',
+        title: 'Clues & Red Herrings',
+        content: `- The first victim had a small, silver serpent pin on his lapel, but it was from a well-known jeweler, not the cult. (Red Herring)\n- All victims visited the same rare book shop in the week before their death. The shopkeeper is nervous and evasive. (Clue)\n- A strange, sweet-smelling incense is found at every crime scene. What is it? -> Leads to a specific black market apothecary.\n- Rumors of a 'Whispering Man' in the docks area. Is he connected or just city gossip?`
+      },
+      {
+        id: 'note-2-2',
+        type: 'note',
+        title: 'Dialogue Snippets',
+        content: `- Elias to Lyra: "Everyone in this city has a price, Lyra. The trick is knowing the currency. Yours is secrets. His is power. Mine... mine is just getting through the day without another ghost whispering in my ear."\n- Captain Isolde to Elias: "I don't approve of your methods, Thorne. But I can't deny your results. Just... try not to burn the city down while you're at it."`
+      }
+    ],
     characters: [
       {
         id: 'char-2-1',

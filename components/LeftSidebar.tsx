@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Project, SelectableItem, OutlineSection } from '../types';
+import { Project, SelectableItem, OutlineSection, Note } from '../types';
 import { SaveStatus, ActiveTab } from './WritingWorkspace';
 import StatusIndicator from './StatusIndicator';
 import Dropdown from './Dropdown';
@@ -18,6 +18,8 @@ interface LeftSidebarProps {
   onAddRootItem: () => void;
   onDeleteOutlineSection: (id: string) => void;
   onReorderOutline: (draggedId: string, targetId: string, position: 'above' | 'below' | 'on') => void;
+  onAddNote: () => void;
+  onDeleteNoteRequest: (note: Note) => void;
   saveStatus: SaveStatus;
 }
 
@@ -287,8 +289,52 @@ const OutlineItem: React.FC<OutlineItemProps> = ({
     );
 };
 
+const NoteItem: React.FC<{
+    note: Note;
+    isSelected: boolean;
+    onSelect: () => void;
+    onDeleteRequest: () => void;
+}> = ({ note, isSelected, onSelect, onDeleteRequest }) => {
+    return (
+        <li className={`group flex items-center justify-between rounded-md my-1 pr-2 transition-colors duration-150 ${isSelected ? 'bg-cyan-600/20' : 'hover:bg-gray-700/50'}`}>
+            <a
+                href="#"
+                onClick={(e) => { e.preventDefault(); onSelect(); }}
+                className={`block p-2 rounded-md text-sm flex-grow truncate transition-all duration-200 ${isSelected ? 'text-cyan-300 font-semibold' : 'text-gray-300 group-hover:text-white'}`}
+            >
+                {note.title}
+            </a>
+            <div className="ml-2 flex-shrink-0 opacity-0 group-hover:opacity-100 focus-within:opacity-100 transition-opacity">
+                <Dropdown
+                    trigger={
+                        <button
+                            aria-label={`Actions for ${note.title}`}
+                            className="p-1 rounded-full text-gray-400 hover:bg-gray-600 hover:text-white"
+                        >
+                            <EllipsisVerticalIcon className="h-4 w-4" />
+                        </button>
+                    }
+                    menuClasses="w-40"
+                >
+                    {(close) => (
+                        <div className="py-1" role="none">
+                            <button
+                                onClick={() => { onDeleteRequest(); close(); }}
+                                className="w-full text-left text-red-400 block px-4 py-2 text-sm hover:bg-gray-700 hover:text-red-300"
+                                role="menuitem"
+                            >
+                                Delete Note
+                            </button>
+                        </div>
+                    )}
+                </Dropdown>
+            </div>
+        </li>
+    );
+};
 
-const LeftSidebar: React.FC<LeftSidebarProps> = ({ project, activeTab, setActiveTab, selectedItem, onSelectItem, onBack, onUpdateOutlineTitle, onToggleOutlineExport, onAddSubItem, onAddRootItem, onDeleteOutlineSection, onReorderOutline, saveStatus }) => {
+
+const LeftSidebar: React.FC<LeftSidebarProps> = ({ project, activeTab, setActiveTab, selectedItem, onSelectItem, onBack, onUpdateOutlineTitle, onToggleOutlineExport, onAddSubItem, onAddRootItem, onDeleteOutlineSection, onReorderOutline, onAddNote, onDeleteNoteRequest, saveStatus }) => {
   const [draggedItemId, setDraggedItemId] = useState<string | null>(null);
   const [dragOverInfo, setDragOverInfo] = useState<DragOverInfo | null>(null);
 
@@ -374,7 +420,31 @@ const LeftSidebar: React.FC<LeftSidebarProps> = ({ project, activeTab, setActive
                 ))}
             </ul>
         )}
-        {/* The list area is intentionally empty for the 'notes' tab */}
+        {activeTab === 'notes' && (
+            <>
+                <div className="px-1 mb-2">
+                    <button
+                        onClick={onAddNote}
+                        className="w-full flex items-center justify-center p-2 rounded-md text-sm bg-gray-700 hover:bg-gray-600 text-cyan-400 font-semibold transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-cyan-500"
+                        aria-label="Add new note"
+                    >
+                        <PlusIcon className="h-4 w-4 mr-2" />
+                        Add New Note
+                    </button>
+                </div>
+                <ul>
+                    {project.notes.map(note => (
+                        <NoteItem
+                            key={note.id}
+                            note={note}
+                            isSelected={selectedItem?.id === note.id}
+                            onSelect={() => onSelectItem(note)}
+                            onDeleteRequest={() => onDeleteNoteRequest(note)}
+                        />
+                    ))}
+                </ul>
+            </>
+        )}
       </div>
     </aside>
   );
