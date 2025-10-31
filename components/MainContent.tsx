@@ -553,7 +553,7 @@ const NoteView: React.FC<{
             defaultValue={item.title}
             onBlur={(e) => e.target.value.trim() && onUpdateNote(item.id, { title: e.target.value.trim() })}
             aria-label="Note title"
-            className="text-4xl font-bold text-cyan-300 bg-transparent rounded-md p-2 -m-2 focus:outline-none focus:bg-gray-800 focus:ring-2 focus:ring-cyan-500"
+            className="w-full text-4xl font-bold text-cyan-300 bg-transparent rounded-md p-2 -m-2 focus:outline-none focus:bg-gray-800 focus:ring-2 focus:ring-cyan-500"
         />
       </div>
       <p className="text-gray-400 mb-6">A scratchpad for your unstructured thoughts, ideas, and snippets of research.</p>
