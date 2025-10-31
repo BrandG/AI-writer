@@ -126,6 +126,7 @@ const WritingWorkspace: React.FC<WritingWorkspaceProps> = ({ project, onBack, on
   const [isGeneratingImage, setIsGeneratingImage] = useState(false);
   const [isGeneratingIllustration, setIsGeneratingIllustration] = useState(false);
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
+  const [isChatSidebarCollapsed, setIsChatSidebarCollapsed] = useState(false);
   const [saveStatus, setSaveStatus] = useState<SaveStatus>('saved');
   const [characterToDelete, setCharacterToDelete] = useState<Character | null>(null);
   const [noteToDelete, setNoteToDelete] = useState<Note | null>(null);
@@ -134,6 +135,7 @@ const WritingWorkspace: React.FC<WritingWorkspaceProps> = ({ project, onBack, on
   const [currentProjectId, setCurrentProjectId] = useState<string>(project.id);
 
   const toggleSidebar = () => setIsSidebarCollapsed(prev => !prev);
+  const toggleChatSidebar = () => setIsChatSidebarCollapsed(prev => !prev);
   const debounceTimeoutRef = useRef<number | null>(null);
 
   // Debounced save effect
@@ -832,6 +834,8 @@ const WritingWorkspace: React.FC<WritingWorkspaceProps> = ({ project, onBack, on
             messages={messages}
             isLoading={isLoading}
             onSendMessage={handleSendMessage}
+            isCollapsed={isChatSidebarCollapsed}
+            onToggleCollapse={toggleChatSidebar}
         />
     </div>
   );
