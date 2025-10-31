@@ -125,6 +125,7 @@ const WritingWorkspace: React.FC<WritingWorkspaceProps> = ({ project, onBack, on
   const [isLoading, setIsLoading] = useState(false);
   const [isGeneratingImage, setIsGeneratingImage] = useState(false);
   const [isGeneratingIllustration, setIsGeneratingIllustration] = useState(false);
+  const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
   const [saveStatus, setSaveStatus] = useState<SaveStatus>('saved');
   const [characterToDelete, setCharacterToDelete] = useState<Character | null>(null);
   const [noteToDelete, setNoteToDelete] = useState<Note | null>(null);
@@ -132,6 +133,7 @@ const WritingWorkspace: React.FC<WritingWorkspaceProps> = ({ project, onBack, on
   // Track the current project ID to differentiate between a project switch and a data update.
   const [currentProjectId, setCurrentProjectId] = useState<string>(project.id);
 
+  const toggleSidebar = () => setIsSidebarCollapsed(prev => !prev);
   const debounceTimeoutRef = useRef<number | null>(null);
 
   // Debounced save effect
@@ -233,7 +235,8 @@ const WritingWorkspace: React.FC<WritingWorkspaceProps> = ({ project, onBack, on
   };
 
     const handleAddOutlineSection = (args: { parentId?: string; title: string; content?: string }) => {
-        const { parentId, title, content } = args;
+        // FIX: Destructured `title`, `content`, and `parentId` from the `args` object to resolve reference errors.
+        const { title, content, parentId } = args;
         const newSection: OutlineSection = {
             id: uuidv4(),
             title: title,
@@ -252,7 +255,7 @@ const WritingWorkspace: React.FC<WritingWorkspaceProps> = ({ project, onBack, on
             }
             return { ...prevProject, outline: newOutline };
         });
-        return { success: true, message: `Section '${args.title}' added successfully.` };
+        return { success: true, message: `Section '${title}' added successfully.` };
     };
 
     const handleUpdateOutlineSection = (args: { sectionId: string; newTitle?: string; newContent?: string }) => {
@@ -788,6 +791,8 @@ const WritingWorkspace: React.FC<WritingWorkspaceProps> = ({ project, onBack, on
             onAddNote={handleAddNote}
             onDeleteNoteRequest={(note) => setNoteToDelete(note)}
             saveStatus={saveStatus}
+            isCollapsed={isSidebarCollapsed}
+            onToggleCollapse={toggleSidebar}
         />
         <MainContent 
             item={selectedItem}

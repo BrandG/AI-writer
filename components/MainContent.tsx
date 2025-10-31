@@ -456,7 +456,7 @@ const OutlineView: React.FC<{
                 onBlur={() => onUpdateOutlineContent(item.id, content)}
                 placeholder="Start writing the content for this section..."
                 aria-label="Outline section content"
-                className="w-full h-80 bg-gray-800 border border-gray-700 rounded-md p-4 pb-8 text-gray-300 leading-relaxed focus:outline-none focus:ring-2 focus:ring-cyan-500 transition-shadow"
+                className="w-full min-h-[20rem] bg-gray-800 border border-gray-700 rounded-md p-4 pb-8 text-gray-300 leading-relaxed focus:outline-none focus:ring-2 focus:ring-cyan-500 transition-shadow resize-y"
             />
              <div className="absolute bottom-2 right-2 text-xs text-gray-500 bg-gray-800/80 px-2 py-1 rounded">
                 {wordCount} {wordCount === 1 ? 'word' : 'words'}
@@ -566,7 +566,7 @@ const NoteView: React.FC<{
         </label>
       </div>
       <p className="text-gray-400 mb-6">A scratchpad for your unstructured thoughts, ideas, and snippets of research.</p>
-      <div className="relative h-[70vh]">
+      <div className="relative">
         <textarea
             key={item.id}
             value={content}
@@ -574,7 +574,7 @@ const NoteView: React.FC<{
             onBlur={() => onUpdateNote(item.id, { content })}
             placeholder="Jot down your ideas here..."
             aria-label="Project notes"
-            className="w-full h-full bg-gray-800 border border-gray-700 rounded-md p-6 pb-8 text-gray-300 leading-relaxed focus:outline-none focus:ring-2 focus:ring-cyan-500 transition-shadow"
+            className="w-full min-h-[70vh] bg-gray-800 border border-gray-700 rounded-md p-6 pb-8 text-gray-300 leading-relaxed focus:outline-none focus:ring-2 focus:ring-cyan-500 transition-shadow resize-y"
         />
         <div className="absolute bottom-2 right-2 text-xs text-gray-500 bg-gray-800/80 px-2 py-1 rounded">
             {wordCount} {wordCount === 1 ? 'word' : 'words'}

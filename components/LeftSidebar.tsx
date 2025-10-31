@@ -21,6 +21,8 @@ interface LeftSidebarProps {
   onAddNote: () => void;
   onDeleteNoteRequest: (note: Note) => void;
   saveStatus: SaveStatus;
+  isCollapsed: boolean;
+  onToggleCollapse: () => void;
 }
 
 const ArrowLeftIcon: React.FC<{className?: string}> = ({ className }) => (
@@ -62,6 +64,18 @@ const UsersIcon: React.FC<{className?: string}> = ({ className }) => (
 const DocumentTextIcon: React.FC<{className?: string}> = ({ className }) => (
     <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className={className}>
       <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 0 0-3.375-3.375h-1.5A1.125 1.125 0 0 1 13.5 7.125v-1.5a3.375 3.375 0 0 0-3.375-3.375H8.25m2.25 0H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 0 0-9-9Z" />
+    </svg>
+);
+
+const ChevronDoubleLeftIcon: React.FC<{className?: string}> = ({ className }) => (
+    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className={className}>
+      <path strokeLinecap="round" strokeLinejoin="round" d="m18.75 4.5-7.5 7.5 7.5 7.5m-6-15L5.25 12l7.5 7.5" />
+    </svg>
+);
+
+const ChevronDoubleRightIcon: React.FC<{className?: string}> = ({ className }) => (
+    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className={className}>
+      <path strokeLinecap="round" strokeLinejoin="round" d="m5.25 4.5 7.5 7.5-7.5 7.5m6-15 7.5 7.5-7.5-7.5" />
     </svg>
 );
 
@@ -334,7 +348,12 @@ const NoteItem: React.FC<{
 };
 
 
-const LeftSidebar: React.FC<LeftSidebarProps> = ({ project, activeTab, setActiveTab, selectedItem, onSelectItem, onBack, onUpdateOutlineTitle, onToggleOutlineExport, onAddSubItem, onAddRootItem, onDeleteOutlineSection, onReorderOutline, onAddNote, onDeleteNoteRequest, saveStatus }) => {
+const LeftSidebar: React.FC<LeftSidebarProps> = ({ 
+    project, activeTab, setActiveTab, selectedItem, onSelectItem, onBack, 
+    onUpdateOutlineTitle, onToggleOutlineExport, onAddSubItem, onAddRootItem, 
+    onDeleteOutlineSection, onReorderOutline, onAddNote, onDeleteNoteRequest, 
+    saveStatus, isCollapsed, onToggleCollapse 
+}) => {
   const [draggedItemId, setDraggedItemId] = useState<string | null>(null);
   const [dragOverInfo, setDragOverInfo] = useState<DragOverInfo | null>(null);
 
@@ -345,18 +364,32 @@ const LeftSidebar: React.FC<LeftSidebarProps> = ({ project, activeTab, setActive
   ];
 
   return (
-    <aside className="w-1/4 max-w-xs bg-gray-800 flex flex-col p-4 border-r border-gray-700">
+    <aside className={`bg-gray-800 flex flex-col border-r border-gray-700 transition-all duration-300 ease-in-out relative ${isCollapsed ? 'w-20 p-2' : 'w-1/4 max-w-xs p-4'}`}>
+      <button
+        onClick={onToggleCollapse}
+        className={`absolute z-10 transition-all duration-300 ease-in-out focus:outline-none focus:ring-2 focus:ring-cyan-500 ${
+            isCollapsed
+            ? 'top-1/2 -translate-y-1/2 right-[-16px] bg-gray-700 text-gray-300 hover:bg-cyan-600 hover:text-white h-8 w-8 rounded-full flex items-center justify-center border-2 border-gray-800'
+            : 'top-4 right-4 p-1 rounded-full text-gray-400 hover:bg-gray-700 hover:text-white'
+        }`}
+        aria-label={isCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+        >
+        {isCollapsed ? <ChevronDoubleRightIcon className="h-5 w-5" /> : <ChevronDoubleLeftIcon className="h-5 w-5" />}
+      </button>
+
       <header className="mb-4">
-        <button onClick={onBack} className="flex items-center text-sm text-cyan-400 hover:text-cyan-300 mb-3 transition-colors">
-            <ArrowLeftIcon className="h-4 w-4 mr-2" />
-            Back to Projects
+        <button onClick={onBack} className={`flex items-center text-sm text-cyan-400 hover:text-cyan-300 mb-3 transition-colors w-full ${isCollapsed ? 'justify-center p-2 rounded-md hover:bg-gray-700' : ''}`}>
+            <ArrowLeftIcon className={`h-5 w-5 ${isCollapsed ? '' : 'mr-2'}`} />
+            <span className={isCollapsed ? 'hidden' : ''}>Back to Projects</span>
         </button>
-        <h1 className="text-2xl font-bold truncate">{project.title}</h1>
-        <h2 className="text-sm text-gray-400 mb-2">{project.genre}</h2>
-        <StatusIndicator status={saveStatus} />
+        <div className={isCollapsed ? 'hidden' : ''}>
+            <h1 className="text-2xl font-bold truncate pr-8">{project.title}</h1>
+            <h2 className="text-sm text-gray-400 mb-2">{project.genre}</h2>
+            <StatusIndicator status={saveStatus} />
+        </div>
       </header>
 
-      <nav className="flex justify-around items-center border-b border-gray-700 mb-4 p-1 bg-gray-900/50 rounded-lg">
+      <nav className={`border-b border-gray-700 mb-4 p-1 bg-gray-900/50 rounded-lg ${isCollapsed ? 'flex flex-col items-center gap-1' : 'flex justify-around items-center'}`}>
         {navItems.map(navItem => (
             <button
                 key={navItem.id}
@@ -370,7 +403,7 @@ const LeftSidebar: React.FC<LeftSidebarProps> = ({ project, activeTab, setActive
         ))}
       </nav>
 
-      <div className="flex-grow overflow-y-auto pr-2">
+      <div className={`flex-grow overflow-y-auto pr-2 ${isCollapsed ? 'hidden' : ''}`}>
         {activeTab === 'outline' && (
              <>
                 <div className="px-1 mb-2">
