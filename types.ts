@@ -70,7 +70,6 @@ export interface Note {
   title: string;
   content: string;
   type: 'note';
-  includeInExport?: boolean;
 }
 
 export interface Project {

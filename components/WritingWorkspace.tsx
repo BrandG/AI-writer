@@ -459,7 +459,6 @@ const WritingWorkspace: React.FC<WritingWorkspaceProps> = ({ project, onBack, on
             type: 'note',
             title: 'New Note',
             content: '',
-            includeInExport: true,
         };
         setCurrentProject(prev => ({
             ...prev,

@@ -555,15 +555,6 @@ const NoteView: React.FC<{
             aria-label="Note title"
             className="text-4xl font-bold text-cyan-300 bg-transparent rounded-md p-2 -m-2 focus:outline-none focus:bg-gray-800 focus:ring-2 focus:ring-cyan-500"
         />
-        <label className="flex items-center text-sm text-gray-400 cursor-pointer">
-            <input
-                type="checkbox"
-                checked={item.includeInExport ?? true}
-                onChange={() => onUpdateNote(item.id, { includeInExport: !(item.includeInExport ?? true) })}
-                className="mr-2 form-checkbox h-4 w-4 bg-gray-700 border-gray-500 rounded text-cyan-500 focus:ring-cyan-600"
-            />
-            Include in export
-        </label>
       </div>
       <p className="text-gray-400 mb-6">A scratchpad for your unstructured thoughts, ideas, and snippets of research.</p>
       <div className="relative">
