@@ -1,6 +1,7 @@
 import React, { useState, useRef } from 'react';
 import { Project, AiProvider } from '../types';
 import ConfirmModal from './ConfirmModal';
+import Logo from './Logo';
 
 interface ProjectSelectionPageProps {
   savedProjects: Project[];
@@ -243,7 +244,7 @@ const ProjectSelectionPage: React.FC<ProjectSelectionPageProps> = ({ savedProjec
     const url = URL.createObjectURL(dataBlob);
     const link = document.createElement('a');
     const timestamp = new Date().toISOString().replace(/:/g, '-').slice(0, 19);
-    link.download = `ai-writing-assistant-backup-${timestamp}.json`;
+    link.download = `storyloom-backup-${timestamp}.json`;
     link.href = url;
     document.body.appendChild(link);
     link.click();
@@ -328,10 +329,9 @@ const ProjectSelectionPage: React.FC<ProjectSelectionPageProps> = ({ savedProjec
         aria-hidden="true"
       />
       
-      <header className="text-center mb-12">
-        <h1 className="text-5xl font-extrabold text-white mb-2">AI Writing Assistant</h1>
-        <p className="text-lg text-gray-400">{savedProjects.length > 0 ? "Continue your work or start a new project." : "Create a new project to begin your creative journey."}</p>
-        <div className="mt-4 flex justify-center items-center gap-2 text-sm text-gray-400">
+      <header className="flex justify-between items-center mb-12 flex-wrap gap-4">
+        <Logo />
+        <div className="flex items-center gap-2 text-sm text-gray-400">
             <span>AI Provider:</span>
             <select
                 value={aiProvider}

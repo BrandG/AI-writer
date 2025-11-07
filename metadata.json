@@ -1,5 +1,5 @@
 {
-  "name": "AI Writing Assistant",
-  "description": "An application to help writers organize their projects, outlines, and characters, with an integrated AI chat assistant for creative support and brainstorming.",
+  "name": "StoryLoom",
+  "description": "An application to help writers weave together their projects, outlines, and characters, with an integrated AI chat assistant for creative support and brainstorming.",
   "requestFramePermissions": []
 }

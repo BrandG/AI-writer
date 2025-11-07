@@ -1,6 +1,6 @@
 // services/imageDbService.ts
 
-const DB_NAME = 'ai-writing-assistant-images';
+const DB_NAME = 'storyloom-images';
 const STORE_NAME = 'images';
 const DB_VERSION = 1;
 

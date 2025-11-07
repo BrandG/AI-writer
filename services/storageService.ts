@@ -1,6 +1,6 @@
 import { Project } from '../types';
 
-const STORAGE_KEY = 'ai-writing-assistant-projects';
+const STORAGE_KEY = 'storyloom-projects';
 
 export const getSavedProjects = (): Project[] => {
     try {

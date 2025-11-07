@@ -4,6 +4,7 @@ import { SaveStatus, ActiveTab } from './WritingWorkspace';
 import StatusIndicator from './StatusIndicator';
 import Dropdown from './Dropdown';
 import ConfirmModal from './ConfirmModal';
+import Logo from './Logo';
 
 interface LeftSidebarProps {
   project: Project;
@@ -378,6 +379,9 @@ const LeftSidebar: React.FC<LeftSidebarProps> = ({
       </button>
 
       <header className="mb-4">
+        <div className={`mb-3 ${isCollapsed ? 'flex justify-center' : ''}`}>
+          <Logo showText={!isCollapsed} />
+        </div>
         <button onClick={onBack} className={`flex items-center text-sm text-cyan-400 hover:text-cyan-300 mb-3 transition-colors w-full ${isCollapsed ? 'justify-center p-2 rounded-md hover:bg-gray-700' : ''}`}>
             <ArrowLeftIcon className={`h-5 w-5 ${isCollapsed ? '' : 'mr-2'}`} />
             <span className={isCollapsed ? 'hidden' : ''}>Back to Projects</span>
