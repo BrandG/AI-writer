@@ -306,7 +306,8 @@ const getToolsAsFunctionDeclarations = (): FunctionDeclaration[] => {
 const getAIResponse = async (
     conversationHistory: OpenAI.Chat.Completions.ChatCompletionMessageParam[],
     project: Project,
-    selectedItem: SelectableItem | null
+    selectedItem: SelectableItem | null,
+    systemInstruction: string
 ): Promise<UnifiedAIResponse> => {
     if (!process.env.API_KEY) {
         throw new Error("AI is disabled. Google API key is missing.");
@@ -314,16 +315,6 @@ const getAIResponse = async (
     const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
 
     const projectContext = formatProjectContext(project, selectedItem);
-    const systemInstruction = `You are a helpful and creative writing assistant. Your primary function is to help a writer manage their story's structure.
-You have been given a set of tools to modify the project's outline and characters.
-
-**CRITICAL INSTRUCTIONS:**
-1. When a user's request involves creating, adding, updating, modifying, deleting, moving, or reordering project data (characters or outline sections), you should prioritize using a tool.
-2. If the user's intent is clear, execute the function call directly. Do not ask for confirmation.
-3. For general conversation, brainstorming, or questions that do not involve direct modification of the project data, you should respond with a helpful text answer.
-
-Use the provided project context and chat history to give insightful and relevant answers.`;
-    
     const geminiHistory = convertToGeminiHistory(conversationHistory);
 
     try {

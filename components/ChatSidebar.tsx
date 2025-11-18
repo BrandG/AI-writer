@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { ChatMessage, Project } from '../types';
+import { ChatMessage, Project, AiPersonality } from '../types';
 
 interface ChatSidebarProps {
   project: Project;
@@ -8,6 +8,8 @@ interface ChatSidebarProps {
   onSendMessage: (userInput: string) => void;
   isCollapsed: boolean;
   onToggleCollapse: () => void;
+  aiPersonality: AiPersonality;
+  onAiPersonalityChange: (personality: AiPersonality) => void;
 }
 
 const SendIcon: React.FC<{className?: string}> = ({ className }) => (
@@ -28,8 +30,14 @@ const ChevronDoubleRightIcon: React.FC<{className?: string}> = ({ className }) =
     </svg>
 );
 
+const ChevronDownIcon: React.FC<{className?: string}> = ({ className }) => (
+    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className={className}>
+        <path strokeLinecap="round" strokeLinejoin="round" d="m19.5 8.25-7.5 7.5-7.5-7.5" />
+    </svg>
+);
 
-const ChatSidebar: React.FC<ChatSidebarProps> = ({ project, messages, isLoading, onSendMessage, isCollapsed, onToggleCollapse }) => {
+
+const ChatSidebar: React.FC<ChatSidebarProps> = ({ project, messages, isLoading, onSendMessage, isCollapsed, onToggleCollapse, aiPersonality, onAiPersonalityChange }) => {
   const [userInput, setUserInput] = useState('');
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -83,7 +91,25 @@ const ChatSidebar: React.FC<ChatSidebarProps> = ({ project, messages, isLoading,
 
       {!isCollapsed && (
         <>
-            <h2 className="text-xl font-bold mb-4 border-b border-gray-700 pb-2 pl-8">AI Assistant</h2>
+            <div className="flex justify-between items-center mb-4 border-b border-gray-700 pb-2 pl-8 pr-2">
+                <h2 className="text-xl font-bold">AI Assistant</h2>
+                <div className="relative">
+                    <select
+                        id="ai-personality"
+                        value={aiPersonality}
+                        onChange={(e) => onAiPersonalityChange(e.target.value as AiPersonality)}
+                        className="bg-gray-700 text-xs text-gray-300 rounded-md py-1 pl-2 pr-6 border-0 focus:ring-2 focus:ring-cyan-500 focus:outline-none appearance-none"
+                        title="Change AI Personality"
+                    >
+                        <option value="assistant">Helpful Assistant</option>
+                        <option value="muse">Creative Muse</option>
+                        <option value="editor">Critical Editor</option>
+                        <option value="peer">Supportive Peer</option>
+                        <option value="oracle">The Oracle</option>
+                    </select>
+                    <ChevronDownIcon className="h-4 w-4 text-gray-400 absolute right-1 top-1/2 -translate-y-1/2 pointer-events-none" />
+                </div>
+            </div>
             <div className="flex-grow overflow-y-auto mb-4 pr-2">
                 <div className="space-y-4">
                 {messages.map((msg, index) => (

@@ -171,7 +171,7 @@ const EditableCharacterField: React.FC<{
 
 
     return (
-        <div className="relative">
+        <div>
             <textarea
                 ref={textareaRef}
                 key={`${character.id}-${field}`}
@@ -180,9 +180,9 @@ const EditableCharacterField: React.FC<{
                 onBlur={() => onUpdateCharacter(character.id, { [field]: currentValue })}
                 placeholder={placeholder}
                 aria-label={field}
-                className="w-full bg-transparent p-2 pb-8 rounded-md text-gray-300 leading-relaxed focus:outline-none focus:ring-2 focus:ring-cyan-500 focus:bg-gray-800 transition-all resize-none min-h-[4rem]"
+                className="w-full bg-transparent p-2 rounded-md text-gray-300 leading-relaxed focus:outline-none focus:ring-2 focus:ring-cyan-500 focus:bg-gray-800 transition-all resize-none min-h-[4rem]"
             />
-            <div className="absolute bottom-2 right-2 text-xs text-gray-500 bg-gray-900/50 px-1 rounded">
+            <div className="text-right text-xs text-gray-400 mt-1 pr-2">
                 {wordCount} {wordCount === 1 ? 'word' : 'words'}
             </div>
         </div>
@@ -448,62 +448,61 @@ const OutlineView: React.FC<{
       </CollapsibleSection>
 
       <CollapsibleSection title="Text" defaultOpen={true}>
-        <div className="relative">
-            <textarea
-                key={item.id} // Re-mount to reflect state changes if another item is selected
-                value={content}
-                onChange={e => setContent(e.target.value)}
-                onBlur={() => onUpdateOutlineContent(item.id, content)}
-                placeholder="Start writing the content for this section..."
-                aria-label="Outline section content"
-                className="w-full min-h-[20rem] bg-gray-800 border border-gray-700 rounded-md p-4 pb-8 text-gray-300 leading-relaxed focus:outline-none focus:ring-2 focus:ring-cyan-500 transition-shadow resize-y"
-            />
-             <div className="absolute bottom-2 right-2 text-xs text-gray-500 bg-gray-800/80 px-2 py-1 rounded">
+        <textarea
+            key={item.id} // Re-mount to reflect state changes if another item is selected
+            value={content}
+            onChange={e => setContent(e.target.value)}
+            onBlur={() => onUpdateOutlineContent(item.id, content)}
+            placeholder="Start writing the content for this section..."
+            aria-label="Outline section content"
+            className="w-full min-h-[20rem] bg-gray-800 border border-gray-700 rounded-md p-4 text-gray-300 leading-relaxed focus:outline-none focus:ring-2 focus:ring-cyan-500 transition-shadow resize-y"
+        />
+        <div className="mt-2 flex justify-between items-center">
+            <div className="relative inline-block text-left">
+                <Dropdown
+                    trigger={
+                        <button
+                            type="button"
+                            className="inline-flex items-center justify-center rounded-md shadow-sm px-4 py-2 text-sm font-medium text-white bg-gray-700 hover:bg-gray-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-gray-900 focus:ring-cyan-500 transition-colors"
+                            id="ai-tools-menu"
+                            aria-haspopup="true"
+                        >
+                            <SparklesIcon className="h-5 w-5 mr-2 -ml-1" />
+                            AI Tools
+                            <ChevronDownIcon className="h-5 w-5 ml-2 -mr-1" />
+                        </button>
+                    }
+                >
+                    {(close) => (
+                        <div className="py-1" role="none">
+                            <button
+                                onClick={() => handleToolClick(() => onConsistencyCheck(item), close)}
+                                className="w-full text-left text-gray-300 block px-4 py-2 text-sm hover:bg-gray-700 hover:text-white"
+                                role="menuitem"
+                            >
+                                Check consistency
+                            </button>
+                            <button
+                                disabled
+                                className="w-full text-left text-gray-500 block px-4 py-2 text-sm cursor-not-allowed"
+                                role="menuitem"
+                            >
+                                Get reading level
+                            </button>
+                            <button
+                                disabled
+                                className="w-full text-left text-gray-500 block px-4 py-2 text-sm cursor-not-allowed"
+                                role="menuitem"
+                            >
+                                Clean up text
+                            </button>
+                        </div>
+                    )}
+                </Dropdown>
+            </div>
+            <div className="text-xs text-gray-400">
                 {wordCount} {wordCount === 1 ? 'word' : 'words'}
             </div>
-        </div>
-
-        <div className="mt-4 relative inline-block text-left">
-            <Dropdown
-                trigger={
-                    <button
-                        type="button"
-                        className="inline-flex items-center justify-center rounded-md shadow-sm px-4 py-2 text-sm font-medium text-white bg-gray-700 hover:bg-gray-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-gray-900 focus:ring-cyan-500 transition-colors"
-                        id="ai-tools-menu"
-                        aria-haspopup="true"
-                    >
-                        <SparklesIcon className="h-5 w-5 mr-2 -ml-1" />
-                        AI Tools
-                        <ChevronDownIcon className="h-5 w-5 ml-2 -mr-1" />
-                    </button>
-                }
-            >
-                {(close) => (
-                    <div className="py-1" role="none">
-                        <button
-                            onClick={() => handleToolClick(() => onConsistencyCheck(item), close)}
-                            className="w-full text-left text-gray-300 block px-4 py-2 text-sm hover:bg-gray-700 hover:text-white"
-                            role="menuitem"
-                        >
-                            Check consistency
-                        </button>
-                        <button
-                            disabled
-                            className="w-full text-left text-gray-500 block px-4 py-2 text-sm cursor-not-allowed"
-                            role="menuitem"
-                        >
-                            Get reading level
-                        </button>
-                        <button
-                            disabled
-                            className="w-full text-left text-gray-500 block px-4 py-2 text-sm cursor-not-allowed"
-                            role="menuitem"
-                        >
-                            Clean up text
-                        </button>
-                    </div>
-                )}
-            </Dropdown>
         </div>
       </CollapsibleSection>
 
@@ -557,7 +556,7 @@ const NoteView: React.FC<{
         />
       </div>
       <p className="text-gray-400 mb-6">A scratchpad for your unstructured thoughts, ideas, and snippets of research.</p>
-      <div className="relative">
+      <div>
         <textarea
             key={item.id}
             value={content}
@@ -565,9 +564,9 @@ const NoteView: React.FC<{
             onBlur={() => onUpdateNote(item.id, { content })}
             placeholder="Jot down your ideas here..."
             aria-label="Project notes"
-            className="w-full min-h-[70vh] bg-gray-800 border border-gray-700 rounded-md p-6 pb-8 text-gray-300 leading-relaxed focus:outline-none focus:ring-2 focus:ring-cyan-500 transition-shadow resize-y"
+            className="w-full min-h-[70vh] bg-gray-800 border border-gray-700 rounded-md p-6 text-gray-300 leading-relaxed focus:outline-none focus:ring-2 focus:ring-cyan-500 transition-shadow resize-y"
         />
-        <div className="absolute bottom-2 right-2 text-xs text-gray-500 bg-gray-800/80 px-2 py-1 rounded">
+        <div className="text-right mt-2 pr-4 text-xs text-gray-400">
             {wordCount} {wordCount === 1 ? 'word' : 'words'}
         </div>
       </div>

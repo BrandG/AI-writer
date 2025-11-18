@@ -90,6 +90,7 @@ export interface ChatMessage {
 export type SelectableItem = Character | OutlineSection | Note;
 
 export type AiProvider = 'openai' | 'gemini';
+export type AiPersonality = 'assistant' | 'muse' | 'editor' | 'peer' | 'oracle';
 
 export interface UnifiedAIResponse {
     text: string | null;
@@ -104,7 +105,12 @@ export interface UnifiedAIResponse {
 
 export interface AiService {
     generateInitialProjectData: (title: string, genre: string, description: string) => Promise<{ outline: OutlineSection[], characters: Character[], notes: Note[] }>;
-    getAIResponse: (conversationHistory: OpenAI.Chat.Completions.ChatCompletionMessageParam[], project: Project, selectedItem: SelectableItem | null) => Promise<UnifiedAIResponse>;
+    getAIResponse: (
+        conversationHistory: OpenAI.Chat.Completions.ChatCompletionMessageParam[],
+        project: Project,
+        selectedItem: SelectableItem | null,
+        systemInstruction: string
+    ) => Promise<UnifiedAIResponse>;
     getConsistencyCheckResponse: (section: OutlineSection, characters: Character[]) => Promise<string>;
     generateCharacterImage: (character: Character) => Promise<string>;
     generateIllustrationForSection: (section: OutlineSection, genre: string) => Promise<string>;

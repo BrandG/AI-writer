@@ -1,5 +1,5 @@
 import React, { useState, useCallback, useEffect, useRef } from 'react';
-import { Project, SelectableItem, OutlineSection, Character, ChatMessage, AiService, Note } from '../types';
+import { Project, SelectableItem, OutlineSection, Character, ChatMessage, AiService, Note, AiPersonality } from '../types';
 import LeftSidebar from './LeftSidebar';
 import MainContent from './MainContent';
 import ChatSidebar from './ChatSidebar';
@@ -130,13 +130,20 @@ const WritingWorkspace: React.FC<WritingWorkspaceProps> = ({ project, onBack, on
   const [saveStatus, setSaveStatus] = useState<SaveStatus>('saved');
   const [characterToDelete, setCharacterToDelete] = useState<Character | null>(null);
   const [noteToDelete, setNoteToDelete] = useState<Note | null>(null);
-  
+  const [aiPersonality, setAiPersonality] = useState<AiPersonality>(
+    () => (localStorage.getItem('aiPersonality') as AiPersonality) || 'assistant'
+  );
+
   // Track the current project ID to differentiate between a project switch and a data update.
   const [currentProjectId, setCurrentProjectId] = useState<string>(project.id);
 
   const toggleSidebar = () => setIsSidebarCollapsed(prev => !prev);
   const toggleChatSidebar = () => setIsChatSidebarCollapsed(prev => !prev);
   const debounceTimeoutRef = useRef<number | null>(null);
+
+  useEffect(() => {
+    localStorage.setItem('aiPersonality', aiPersonality);
+  }, [aiPersonality]);
 
   // Debounced save effect
   useEffect(() => {
@@ -643,6 +650,25 @@ const WritingWorkspace: React.FC<WritingWorkspaceProps> = ({ project, onBack, on
         return handleUpdateCharacter(characterId, remappedUpdates);
     };
 
+    const personalityPrompts: Record<AiPersonality, string> = {
+        assistant: 'You are a helpful and creative writing assistant.',
+        muse: 'You are a creative muse, an inspiring and imaginative partner. You speak poetically and offer unconventional ideas, often using metaphors.',
+        editor: 'You are a sharp, incisive editor. Your goal is to find weaknesses and offer constructive, direct criticism. You are pragmatic, concise, and avoid fluff or praise.',
+        peer: 'You are a supportive fellow writer. You are encouraging, empathetic, and offer suggestions as if you were brainstorming with a friend. Use "we" and "us" to create a collaborative tone.',
+        oracle: 'You are The Oracle. You speak in cryptic, thought-provoking phrases. You answer questions with more questions, designed to spark deeper thinking and challenge assumptions. Your goal is not to give answers, but to illuminate the path to them.',
+    };
+
+    const toolInstructions = `Your primary function is to help a writer manage their story's structure.
+You have been given a set of tools to modify the project's outline and characters.
+
+**CRITICAL INSTRUCTIONS:**
+1. When a user's request involves creating, adding, updating, modifying, deleting, moving, or reordering project data (characters or outline sections), you should prioritize using a tool.
+2. If the user's intent is clear, execute the function call directly. Do not ask for confirmation.
+3. For general conversation, brainstorming, or questions that do not involve direct modification of the project data, you should respond with a helpful text answer.
+
+Use the provided project context and chat history to give insightful and relevant answers.`;
+
+
     const handleSendMessage = async (userInput: string) => {
         setIsLoading(true);
         const userMessage: ChatMessage = { role: 'user', text: userInput };
@@ -651,8 +677,10 @@ const WritingWorkspace: React.FC<WritingWorkspaceProps> = ({ project, onBack, on
         let currentHistory: any[] = [...conversationHistory, { role: 'user', content: userInput }];
         setConversationHistory(currentHistory);
         
+        const systemInstruction = `${personalityPrompts[aiPersonality]}\n\n${toolInstructions}`;
+
         try {
-            const response = await aiService.getAIResponse(currentHistory, currentProject, selectedItem);
+            const response = await aiService.getAIResponse(currentHistory, currentProject, selectedItem, systemInstruction);
             
             const toolCalls = response.toolCalls;
 
@@ -704,7 +732,7 @@ const WritingWorkspace: React.FC<WritingWorkspaceProps> = ({ project, onBack, on
                 currentHistory.push(...toolResultMessages);
                 setConversationHistory(currentHistory);
 
-                const finalResponse = await aiService.getAIResponse(currentHistory, currentProject, selectedItem);
+                const finalResponse = await aiService.getAIResponse(currentHistory, currentProject, selectedItem, systemInstruction);
 
                 if (finalResponse.text) {
                     const modelMessage: ChatMessage = { role: 'model', text: finalResponse.text };
@@ -835,6 +863,8 @@ const WritingWorkspace: React.FC<WritingWorkspaceProps> = ({ project, onBack, on
             onSendMessage={handleSendMessage}
             isCollapsed={isChatSidebarCollapsed}
             onToggleCollapse={toggleChatSidebar}
+            aiPersonality={aiPersonality}
+            onAiPersonalityChange={setAiPersonality}
         />
     </div>
   );
