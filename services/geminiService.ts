@@ -319,11 +319,12 @@ const getAIResponse = async (
 
     try {
         const response: GenerateContentResponse = await ai.models.generateContent({
-            model: 'gemini-2.5-pro',
+            model: 'gemini-3-pro-preview',
             contents: geminiHistory,
             config: {
                 systemInstruction: `${systemInstruction}\n\n${projectContext}`,
                 tools: [{ functionDeclarations: getToolsAsFunctionDeclarations() }],
+                thinkingConfig: { thinkingBudget: 2048 }, // Moderate thinking budget for chat
             }
         });
 
@@ -414,13 +415,16 @@ SCENE CONTENT:
 ${section.content}
 
 Now, perform the analysis based on the rules above. Re-read the scene multiple times if necessary to ensure no contradictions are missed.`;
-console.log(prompt);
+
     try {
         const response = await ai.models.generateContent({
-            model: 'gemini-2.5-pro',
+            model: 'gemini-3-pro-preview',
             contents: prompt,
+            config: {
+                thinkingConfig: { thinkingBudget: 4096 }, // Detailed analysis
+            }
         });
-        return response.text;
+        return response.text || "No response text.";
     } catch (error) {
         console.error("Error fetching from Gemini API for consistency check:", error);
         return "Sorry, I encountered an error during the consistency check with Gemini. Please try again.";
@@ -439,18 +443,24 @@ Outfit: ${character.styleOutfit}.
 Focus on a clear, expressive facial portrait.`;
     
     try {
-        const response = await ai.models.generateImages({
-            model: 'imagen-4.0-generate-001',
-            prompt: prompt,
+        const response = await ai.models.generateContent({
+            model: 'gemini-2.5-flash-image',
+            contents: { parts: [{ text: prompt }] },
             config: {
-                numberOfImages: 1,
-                outputMimeType: 'image/jpeg',
-                aspectRatio: '1:1',
+                imageConfig: {
+                    aspectRatio: '1:1',
+                },
             },
         });
 
-        const base64ImageBytes: string = response.generatedImages[0].image.imageBytes;
-        return base64ImageBytes;
+        // Find the image part
+        for (const part of response.candidates?.[0]?.content?.parts || []) {
+            if (part.inlineData) {
+                return part.inlineData.data;
+            }
+        }
+        throw new Error("No image found in response.");
+
     } catch (error) {
         console.error("Error generating character image with Gemini:", error);
         throw new Error("Sorry, I encountered an error while generating the image with Gemini.");
@@ -468,18 +478,24 @@ Scene Description: ${section.content}
 Style: Atmospheric, evocative, cinematic, matching the ${genre} genre. No text or titles in the image.`;
 
     try {
-        const response = await ai.models.generateImages({
-            model: 'imagen-4.0-generate-001',
-            prompt: prompt,
+        const response = await ai.models.generateContent({
+            model: 'gemini-2.5-flash-image',
+            contents: { parts: [{ text: prompt }] },
             config: {
-                numberOfImages: 1,
-                outputMimeType: 'image/jpeg',
-                aspectRatio: '16:9',
+                imageConfig: {
+                    aspectRatio: '16:9',
+                },
             },
         });
 
-        const base64ImageBytes: string = response.generatedImages[0].image.imageBytes;
-        return base64ImageBytes;
+        // Find the image part
+        for (const part of response.candidates?.[0]?.content?.parts || []) {
+            if (part.inlineData) {
+                return part.inlineData.data;
+            }
+        }
+        throw new Error("No image found in response.");
+
     } catch (error) {
         console.error("Error generating illustration with Gemini:", error);
         throw new Error("Sorry, I encountered an error while generating the illustration with Gemini.");
@@ -560,7 +576,7 @@ The notes section should contain a few notes, each with a title and content, for
 
     try {
         const response = await ai.models.generateContent({
-            model: "gemini-2.5-pro",
+            model: "gemini-3-pro-preview",
             contents: prompt,
             config: {
                 responseMimeType: "application/json",
@@ -602,7 +618,8 @@ The notes section should contain a few notes, each with a title and content, for
                         }
                     },
                     required: ['characters', 'outline', 'notes']
-                }
+                },
+                thinkingConfig: { thinkingBudget: 8192 }, // High thinking budget for generation
             },
         });
         const jsonResponse = JSON.parse(response.text.trim());
