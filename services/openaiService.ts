@@ -360,10 +360,18 @@ const generateCharacterImage = async (character: Character): Promise<string> => 
     }
     const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY, dangerouslyAllowBrowser: true });
 
-    const prompt = `Character portrait of ${character.name}. Style: realistic digital concept art.
+    const basicInfo = [
+        character.age ? `Age: ${character.age}.` : '',
+        character.gender ? `Gender: ${character.gender}.` : '',
+        character.species ? `Species: ${character.species}.` : ''
+    ].filter(Boolean).join(' ');
+
+    const prompt = `Photographic portrait of ${character.name}. Style: Photorealistic, cinematic 8k photography, highly detailed.
+Basic Info: ${basicInfo}
 Description: ${character.description}.
 Appearance: ${character.faceHairEyes}, ${character.heightBuild}.
 Outfit: ${character.styleOutfit}.
+${character.actorVisualReference ? `Visual Reference: ${character.actorVisualReference}.` : ''}
 Focus on a clear, expressive facial portrait.`;
 
     try {
@@ -393,10 +401,10 @@ const generateIllustrationForSection = async (section: OutlineSection, genre: st
     }
     const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY, dangerouslyAllowBrowser: true });
 
-    const prompt = `Digital painting illustration for a scene from a ${genre} story.
+    const prompt = `Photorealistic image for a scene from a ${genre} story.
 Scene Title: "${section.title}".
 Scene Description: ${section.content}
-Style: Atmospheric, evocative, cinematic, matching the ${genre} genre. No text or titles in the image.`;
+Style: Cinematic photography, 8k resolution, highly detailed, realistic lighting matching the ${genre} genre. No text or titles in the image.`;
 
     try {
         const response = await openai.images.generate({

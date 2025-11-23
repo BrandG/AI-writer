@@ -324,7 +324,7 @@ const getAIResponse = async (
             config: {
                 systemInstruction: `${systemInstruction}\n\n${projectContext}`,
                 tools: [{ functionDeclarations: getToolsAsFunctionDeclarations() }],
-                thinkingConfig: { thinkingBudget: 2048 }, // Moderate thinking budget for chat
+                // thinkingConfig removed to prevent "Function call is missing a thought signature" error
             }
         });
 
@@ -436,15 +436,24 @@ const generateCharacterImage = async (character: Character): Promise<string> => 
         throw new Error("AI is disabled. Google API key is missing.");
     }
     const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
-    const prompt = `Character portrait of ${character.name}. Style: realistic digital concept art.
+    
+    const basicInfo = [
+        character.age ? `Age: ${character.age}.` : '',
+        character.gender ? `Gender: ${character.gender}.` : '',
+        character.species ? `Species: ${character.species}.` : ''
+    ].filter(Boolean).join(' ');
+
+    const prompt = `Photographic portrait of ${character.name}. Style: Photorealistic, cinematic 8k photography, highly detailed.
+Basic Info: ${basicInfo}
 Description: ${character.description}.
 Appearance: ${character.faceHairEyes}, ${character.heightBuild}.
 Outfit: ${character.styleOutfit}.
+${character.actorVisualReference ? `Visual Reference: ${character.actorVisualReference}.` : ''}
 Focus on a clear, expressive facial portrait.`;
     
     try {
         const response = await ai.models.generateContent({
-            model: 'gemini-2.5-flash-image',
+            model: 'gemini-2.5-flash-image', // Nano Banana model
             contents: { parts: [{ text: prompt }] },
             config: {
                 imageConfig: {
@@ -452,6 +461,11 @@ Focus on a clear, expressive facial portrait.`;
                 },
             },
         });
+
+        // Check for safety blocking
+        if (response.candidates?.[0]?.finishReason === 'SAFETY') {
+             throw new Error("Image generation was blocked due to safety guidelines.");
+        }
 
         // Find the image part
         for (const part of response.candidates?.[0]?.content?.parts || []) {
@@ -463,6 +477,7 @@ Focus on a clear, expressive facial portrait.`;
 
     } catch (error) {
         console.error("Error generating character image with Gemini:", error);
+        if (error instanceof Error) throw error;
         throw new Error("Sorry, I encountered an error while generating the image with Gemini.");
     }
 };
@@ -472,14 +487,14 @@ const generateIllustrationForSection = async (section: OutlineSection, genre: st
         throw new Error("AI is disabled. Google API key is missing.");
     }
     const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
-    const prompt = `Digital painting illustration for a scene from a ${genre} story.
+    const prompt = `Photorealistic image for a scene from a ${genre} story.
 Scene Title: "${section.title}".
 Scene Description: ${section.content}
-Style: Atmospheric, evocative, cinematic, matching the ${genre} genre. No text or titles in the image.`;
+Style: Cinematic photography, 8k resolution, highly detailed, realistic lighting matching the ${genre} genre. No text or titles in the image.`;
 
     try {
         const response = await ai.models.generateContent({
-            model: 'gemini-2.5-flash-image',
+            model: 'gemini-2.5-flash-image', // Nano Banana model
             contents: { parts: [{ text: prompt }] },
             config: {
                 imageConfig: {
@@ -487,6 +502,11 @@ Style: Atmospheric, evocative, cinematic, matching the ${genre} genre. No text o
                 },
             },
         });
+
+         // Check for safety blocking
+        if (response.candidates?.[0]?.finishReason === 'SAFETY') {
+             throw new Error("Image generation was blocked due to safety guidelines.");
+        }
 
         // Find the image part
         for (const part of response.candidates?.[0]?.content?.parts || []) {
@@ -498,6 +518,7 @@ Style: Atmospheric, evocative, cinematic, matching the ${genre} genre. No text o
 
     } catch (error) {
         console.error("Error generating illustration with Gemini:", error);
+        if (error instanceof Error) throw error;
         throw new Error("Sorry, I encountered an error while generating the illustration with Gemini.");
     }
 };
@@ -619,7 +640,7 @@ The notes section should contain a few notes, each with a title and content, for
                     },
                     required: ['characters', 'outline', 'notes']
                 },
-                thinkingConfig: { thinkingBudget: 8192 }, // High thinking budget for generation
+                // thinkingConfig removed to ensure reliable JSON generation
             },
         });
         const jsonResponse = JSON.parse(response.text.trim());
