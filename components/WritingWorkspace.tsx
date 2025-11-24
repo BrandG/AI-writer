@@ -573,6 +573,27 @@ const WritingWorkspace: React.FC<WritingWorkspaceProps> = ({ project, onBack, on
         }
     };
 
+    const handleReadingLevelCheck = async (section: OutlineSection) => {
+        setIsLoading(true);
+        setMessages(prev => [...prev, { role: 'model', text: `Analyzing reading level for "${section.title}"...` }]);
+
+        if (!section.content.trim()) {
+            setMessages(prev => [...prev, { role: 'model', text: "The section is empty. Please add some content to analyze." }]);
+            setIsLoading(false);
+            return;
+        }
+
+        try {
+            const analysis = await aiService.getReadingLevel(section.content);
+            setMessages(prev => [...prev, { role: 'model', text: analysis }]);
+        } catch (error) {
+             const errorMessage = error instanceof Error ? error.message : "An unknown error occurred.";
+             setMessages(prev => [...prev, { role: 'model', text: `Error: ${errorMessage}` }]);
+        } finally {
+            setIsLoading(false);
+        }
+    };
+
     const handleGenerateCharacterImage = async (characterId: string) => {
         const character = currentProject.characters.find(c => c.id === characterId);
         if (!character) return;
@@ -913,6 +934,7 @@ Use the provided project context and chat history to give insightful and relevan
                 });
             }}
             onConsistencyCheck={handleConsistencyCheck}
+            onReadingLevelCheck={handleReadingLevelCheck}
             onGenerateCharacterImage={handleGenerateCharacterImage}
             onDeleteCharacterImage={handleDeleteCharacterImage}
             isGeneratingImage={isGeneratingImage}

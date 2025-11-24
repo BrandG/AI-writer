@@ -363,6 +363,36 @@ ${section.content}`;
     }
 };
 
+const getReadingLevel = async (text: string): Promise<string> => {
+    if (!process.env.OPENAI_API_KEY) {
+        return "AI is disabled. OpenAI API key is missing.";
+    }
+    const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY, dangerouslyAllowBrowser: true });
+    
+    const prompt = `Analyze the reading level of the following text.
+    1. Calculate or estimate the Flesch-Kincaid Grade Level.
+    2. Describe the sentence structure complexity and vocabulary.
+    3. Suggest who the target audience might be based on this level.
+
+    Keep the response concise and helpful for a writer.
+
+    Text:
+    "${text}"`;
+
+    try {
+        const response = await openai.chat.completions.create({
+            model: 'gpt-4o',
+            messages: [
+                { role: 'user', content: prompt }
+            ]
+        });
+        return response.choices[0].message.content || "No response from AI.";
+    } catch (error) {
+        console.error("Error fetching from OpenAI API for reading level:", error);
+        return "Sorry, I encountered an error checking the reading level.";
+    }
+};
+
 // Image generation functions
 const generateCharacterImage = async (character: Character): Promise<string> => {
     if (!process.env.OPENAI_API_KEY) {
@@ -512,6 +542,7 @@ export const openaiService: AiService = {
     generateInitialProjectData,
     getAIResponse,
     getConsistencyCheckResponse,
+    getReadingLevel,
     generateCharacterImage,
     generateIllustrationForSection,
 };

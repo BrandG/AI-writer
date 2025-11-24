@@ -19,6 +19,7 @@ interface MainContentProps {
   onDeleteTaskListRequest: (list: TaskList) => void;
   onToggleCharacterAssociation: (sectionId: string, characterId: string) => void;
   onConsistencyCheck: (section: OutlineSection) => void;
+  onReadingLevelCheck: (section: OutlineSection) => void;
   onGenerateCharacterImage: (characterId: string) => void;
   isGeneratingImage: boolean;
   onGenerateIllustration: (sectionId: string) => void;
@@ -392,10 +393,11 @@ const OutlineView: React.FC<{
   onUpdateOutlineContent: (sectionId: string, newContent: string) => void;
   onToggleCharacterAssociation: (sectionId: string, characterId: string) => void;
   onConsistencyCheck: (section: OutlineSection) => void;
+  onReadingLevelCheck: (section: OutlineSection) => void;
   onGenerateIllustration: (sectionId: string) => void;
   onDeleteIllustration: (sectionId: string) => void;
   isGeneratingIllustration: boolean;
-}> = ({ item, project, onUpdateOutlineContent, onToggleCharacterAssociation, onConsistencyCheck, onGenerateIllustration, onDeleteIllustration, isGeneratingIllustration }) => {
+}> = ({ item, project, onUpdateOutlineContent, onToggleCharacterAssociation, onConsistencyCheck, onReadingLevelCheck, onGenerateIllustration, onDeleteIllustration, isGeneratingIllustration }) => {
   const [content, setContent] = useState(item.content);
   const wordCount = (content || '').trim().split(/\s+/).filter(Boolean).length;
 
@@ -492,8 +494,8 @@ const OutlineView: React.FC<{
                                 Check consistency
                             </button>
                             <button
-                                disabled
-                                className="w-full text-left text-gray-500 block px-4 py-2 text-sm cursor-not-allowed"
+                                onClick={() => handleToolClick(() => onReadingLevelCheck(item), close)}
+                                className="w-full text-left text-gray-300 block px-4 py-2 text-sm hover:bg-gray-700 hover:text-white"
                                 role="menuitem"
                             >
                                 Get reading level
@@ -719,7 +721,7 @@ const TaskListView: React.FC<{
     );
 }
 
-const MainContent: React.FC<MainContentProps> = ({ item, project, activeTab, onUpdateOutlineContent, onUpdateCharacter, onDeleteCharacterRequest, onUpdateNote, onDeleteNoteRequest, onUpdateTaskList, onDeleteTaskListRequest, onToggleCharacterAssociation, onConsistencyCheck, onGenerateCharacterImage, isGeneratingImage, onGenerateIllustration, isGeneratingIllustration, onDeleteCharacterImage, onDeleteIllustration }) => {
+const MainContent: React.FC<MainContentProps> = ({ item, project, activeTab, onUpdateOutlineContent, onUpdateCharacter, onDeleteCharacterRequest, onUpdateNote, onDeleteNoteRequest, onUpdateTaskList, onDeleteTaskListRequest, onToggleCharacterAssociation, onConsistencyCheck, onReadingLevelCheck, onGenerateCharacterImage, isGeneratingImage, onGenerateIllustration, isGeneratingIllustration, onDeleteCharacterImage, onDeleteIllustration }) => {
   const renderContent = () => {
     if (activeTab === 'notes') {
         if (item?.type === 'note') {
@@ -763,6 +765,7 @@ const MainContent: React.FC<MainContentProps> = ({ item, project, activeTab, onU
               onUpdateOutlineContent={onUpdateOutlineContent}
               onToggleCharacterAssociation={onToggleCharacterAssociation}
               onConsistencyCheck={onConsistencyCheck}
+              onReadingLevelCheck={onReadingLevelCheck}
               onGenerateIllustration={onGenerateIllustration}
               onDeleteIllustration={onDeleteIllustration}
               isGeneratingIllustration={isGeneratingIllustration}

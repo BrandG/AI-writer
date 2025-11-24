@@ -441,6 +441,33 @@ Now, perform the analysis based on the rules above. Re-read the scene multiple t
     }
 };
 
+const getReadingLevel = async (text: string): Promise<string> => {
+    if (!process.env.API_KEY) {
+        return "AI is disabled. Google API key is missing.";
+    }
+    const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+    const prompt = `Analyze the reading level of the following text.
+    1. Calculate or estimate the Flesch-Kincaid Grade Level.
+    2. Describe the sentence structure complexity and vocabulary.
+    3. Suggest who the target audience might be based on this level.
+
+    Keep the response concise and helpful for a writer.
+
+    Text:
+    "${text}"`;
+
+    try {
+        const response = await ai.models.generateContent({
+            model: 'gemini-2.5-flash',
+            contents: prompt,
+        });
+        return response.text || "No response text.";
+    } catch (error) {
+        console.error("Error fetching from Gemini API for reading level:", error);
+        return "Sorry, I encountered an error checking the reading level.";
+    }
+};
+
 const generateCharacterImage = async (character: Character): Promise<string> => {
     if (!process.env.API_KEY) {
         throw new Error("AI is disabled. Google API key is missing.");
@@ -682,6 +709,7 @@ export const geminiService: AiService = {
     generateInitialProjectData,
     getAIResponse,
     getConsistencyCheckResponse,
+    getReadingLevel,
     generateCharacterImage,
     generateIllustrationForSection,
 };
