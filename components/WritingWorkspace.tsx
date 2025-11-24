@@ -901,6 +901,22 @@ Use the provided project context and chat history to give insightful and relevan
         }
     };
 
+    const handleTriggerAdvisor = (advisorName: string) => {
+        if (isChatSidebarCollapsed) {
+            setIsChatSidebarCollapsed(false);
+        }
+        
+        const prompt = `Please analyze my project outline using the "${advisorName}" storytelling framework.
+        
+        Review the current outline sections and headings.
+        1. Briefly summarize the core philosophy of ${advisorName}.
+        2. Map my current outline to the stages of this framework.
+        3. Identify where the story deviates or is missing key structural beats.
+        4. Suggest concrete ways to adapt the current outline to fit this pattern effectively.`;
+
+        handleSendMessage(prompt);
+    };
+
   return (
     <div className="flex h-screen w-full">
         <ConfirmModal
@@ -984,6 +1000,7 @@ Use the provided project context and chat history to give insightful and relevan
             onRedo={redo}
             canUndo={history.past.length > 0}
             canRedo={history.future.length > 0}
+            onTriggerAdvisor={handleTriggerAdvisor}
         />
         <MainContent 
             item={selectedItem}

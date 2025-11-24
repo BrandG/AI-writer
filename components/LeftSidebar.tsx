@@ -30,7 +30,19 @@ interface LeftSidebarProps {
   onRedo: () => void;
   canUndo: boolean;
   canRedo: boolean;
+  onTriggerAdvisor: (advisorName: string) => void;
 }
+
+const ADVISORS = [
+  { name: "Dan Harmon's Story Circle", description: "8 steps focused on character change." },
+  { name: "The Hero's Journey", description: "Joseph Campbell's classic mythic structure." },
+  { name: "Save the Cat!", description: "Blake Snyder's beat sheet for pacing." },
+  { name: "Three-Act Structure", description: "Standard Setup, Confrontation, Resolution." },
+  { name: "Kishōtenketsu", description: "Introduction, Development, Twist, Conclusion." },
+  { name: "Fichtean Curve", description: "Series of crises leading to a climax." },
+  { name: "Seven-Point Structure", description: "Focuses on the rise and fall of tension." },
+  { name: "The Snowflake Method", description: "Expands from a single sentence outwards." },
+];
 
 const ArrowLeftIcon: React.FC<{className?: string}> = ({ className }) => (
     <svg xmlns="http://www.w3.org/2000/svg" className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -101,6 +113,12 @@ const ArrowUturnLeftIcon: React.FC<{className?: string}> = ({ className }) => (
 const ArrowUturnRightIcon: React.FC<{className?: string}> = ({ className }) => (
   <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className={className}>
     <path strokeLinecap="round" strokeLinejoin="round" d="m15 15 6-6m0 0-6-6m6 6H9a6 6 0 0 0 0 12h3" />
+  </svg>
+);
+
+const AcademicCapIcon: React.FC<{className?: string}> = ({ className }) => (
+  <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className={className}>
+    <path strokeLinecap="round" strokeLinejoin="round" d="M4.26 10.147a60.436 60.436 0 0 0-.491 6.347A48.627 48.627 0 0 1 12 20.904a48.627 48.627 0 0 1 8.232-4.41 60.46 60.46 0 0 0-.491-6.347m-15.482 0a50.57 50.57 0 0 0-5.217 0-5.217 50.57 0 0 0-5.217-5.217m0 0c.838 1.657 1.874 3.238 3.086 4.728m0 0a50.57 50.57 0 0 1 5.217 5.217m-15.482 0a50.557 50.557 0 0 1 12-5.73m-12 5.73c.838-1.657 1.874-3.238 3.086-4.728m0 0a50.557 50.557 0 0 1 12 5.73M9 10l3 3m-3-3l-3 3m3-3v10" />
   </svg>
 );
 
@@ -380,7 +398,7 @@ const LeftSidebar: React.FC<LeftSidebarProps> = ({
     onDeleteOutlineSection, onReorderOutline, onAddNote, onDeleteNoteRequest, 
     onAddTaskList, onDeleteTaskListRequest,
     saveStatus, isCollapsed, onToggleCollapse,
-    onUndo, onRedo, canUndo, canRedo
+    onUndo, onRedo, canUndo, canRedo, onTriggerAdvisor
 }) => {
   const [draggedItemId, setDraggedItemId] = useState<string | null>(null);
   const [dragOverInfo, setDragOverInfo] = useState<DragOverInfo | null>(null);
@@ -435,6 +453,41 @@ const LeftSidebar: React.FC<LeftSidebarProps> = ({
                 >
                     <ArrowUturnRightIcon className="h-5 w-5" />
                 </button>
+
+                <div className="w-px h-4 bg-gray-700 mx-1"></div>
+
+                <Dropdown
+                    trigger={
+                        <button
+                            className="flex items-center gap-1 px-2 py-1 text-sm font-medium text-gray-400 hover:text-white hover:bg-gray-700 rounded-md transition-colors"
+                            title="Story Advisors"
+                        >
+                             <AcademicCapIcon className="h-5 w-5" />
+                             <span>Advisors</span>
+                        </button>
+                    }
+                    menuClasses="w-64"
+                >
+                    {(close) => (
+                        <div className="py-1" role="none">
+                             <div className="px-4 py-2 text-xs font-semibold text-gray-500 uppercase tracking-wider border-b border-gray-700">
+                                Select an Advisor
+                            </div>
+                            {ADVISORS.map((advisor) => (
+                                <button
+                                    key={advisor.name}
+                                    onClick={() => { onTriggerAdvisor(advisor.name); close(); }}
+                                    className="w-full text-left px-4 py-3 hover:bg-gray-700 transition-colors group"
+                                    role="menuitem"
+                                >
+                                    <div className="text-sm font-medium text-gray-200 group-hover:text-white">{advisor.name}</div>
+                                    <div className="text-xs text-gray-500 group-hover:text-gray-400">{advisor.description}</div>
+                                </button>
+                            ))}
+                        </div>
+                    )}
+                </Dropdown>
+
                 <div className="flex-grow"></div>
                 <StatusIndicator status={saveStatus} />
             </div>
