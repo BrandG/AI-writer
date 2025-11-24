@@ -328,13 +328,16 @@ const getAIResponse = async (
     const geminiHistory = convertToGeminiHistory(conversationHistory);
 
     try {
+        // Use gemini-2.5-flash for the main chat interface. 
+        // It provides the most stable experience for Function Calling (Tools) and avoids the 
+        // "Function call is missing a thought signature" error that can occur with gemini-3-pro-preview
+        // when mixing tool use with experimental thinking features.
         const response: GenerateContentResponse = await ai.models.generateContent({
-            model: 'gemini-3-pro-preview',
+            model: 'gemini-2.5-flash',
             contents: geminiHistory,
             config: {
                 systemInstruction: `${systemInstruction}\n\n${projectContext}`,
                 tools: [{ functionDeclarations: getToolsAsFunctionDeclarations() }],
-                // thinkingConfig removed to prevent "Function call is missing a thought signature" error
             }
         });
 
@@ -465,6 +468,37 @@ const getReadingLevel = async (text: string): Promise<string> => {
     } catch (error) {
         console.error("Error fetching from Gemini API for reading level:", error);
         return "Sorry, I encountered an error checking the reading level.";
+    }
+};
+
+const cleanUpText = async (text: string): Promise<string> => {
+    if (!process.env.API_KEY) {
+        return "AI is disabled. Google API key is missing.";
+    }
+    const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+    const prompt = `You are a professional copy editor. Your goal is to 'clean up' the following text. 
+    
+    This means:
+    1. Fix grammar, spelling, and punctuation errors.
+    2. Make minor adjustments to sentence structure for clarity and flow.
+    3. Remove redundant words or phrases.
+    
+    CRITICAL: You must strictly PRESERVE the original voice, tone, style, and meaning of the text. Do not rewrite the story or change the content, just polish the prose.
+    
+    Return ONLY the cleaned text. Do not add any conversational filler.
+    
+    Text to clean:
+    "${text}"`;
+
+    try {
+        const response = await ai.models.generateContent({
+            model: 'gemini-2.5-flash',
+            contents: prompt,
+        });
+        return response.text || text;
+    } catch (error) {
+        console.error("Error fetching from Gemini API for text cleanup:", error);
+        throw new Error("Sorry, I encountered an error cleaning up the text.");
     }
 };
 
@@ -710,6 +744,7 @@ export const geminiService: AiService = {
     getAIResponse,
     getConsistencyCheckResponse,
     getReadingLevel,
+    cleanUpText,
     generateCharacterImage,
     generateIllustrationForSection,
 };

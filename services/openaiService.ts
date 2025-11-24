@@ -393,6 +393,40 @@ const getReadingLevel = async (text: string): Promise<string> => {
     }
 };
 
+const cleanUpText = async (text: string): Promise<string> => {
+    if (!process.env.OPENAI_API_KEY) {
+        return "AI is disabled. OpenAI API key is missing.";
+    }
+    const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY, dangerouslyAllowBrowser: true });
+    
+    const prompt = `You are a professional copy editor. Your goal is to 'clean up' the following text. 
+    
+    This means:
+    1. Fix grammar, spelling, and punctuation errors.
+    2. Make minor adjustments to sentence structure for clarity and flow.
+    3. Remove redundant words or phrases.
+    
+    CRITICAL: You must strictly PRESERVE the original voice, tone, style, and meaning of the text. Do not rewrite the story or change the content, just polish the prose.
+    
+    Return ONLY the cleaned text. Do not add any conversational filler.
+    
+    Text to clean:
+    "${text}"`;
+
+    try {
+        const response = await openai.chat.completions.create({
+            model: 'gpt-4o',
+            messages: [
+                { role: 'user', content: prompt }
+            ]
+        });
+        return response.choices[0].message.content || text;
+    } catch (error) {
+        console.error("Error fetching from OpenAI API for text cleanup:", error);
+        throw new Error("Sorry, I encountered an error cleaning up the text.");
+    }
+};
+
 // Image generation functions
 const generateCharacterImage = async (character: Character): Promise<string> => {
     if (!process.env.OPENAI_API_KEY) {
@@ -543,6 +577,7 @@ export const openaiService: AiService = {
     getAIResponse,
     getConsistencyCheckResponse,
     getReadingLevel,
+    cleanUpText,
     generateCharacterImage,
     generateIllustrationForSection,
 };

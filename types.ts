@@ -127,6 +127,7 @@ export interface AiService {
     ) => Promise<UnifiedAIResponse>;
     getConsistencyCheckResponse: (section: OutlineSection, characters: Character[]) => Promise<string>;
     getReadingLevel: (text: string) => Promise<string>;
+    cleanUpText: (text: string) => Promise<string>;
     generateCharacterImage: (character: Character) => Promise<string>;
     generateIllustrationForSection: (section: OutlineSection, genre: string) => Promise<string>;
 }

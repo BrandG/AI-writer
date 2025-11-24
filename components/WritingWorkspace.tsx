@@ -594,6 +594,36 @@ const WritingWorkspace: React.FC<WritingWorkspaceProps> = ({ project, onBack, on
         }
     };
 
+    const handleCleanUpText = async (section: OutlineSection) => {
+        setIsLoading(true);
+        setMessages(prev => [...prev, { role: 'model', text: `Cleaning up text for "${section.title}"...` }]);
+
+        if (!section.content.trim()) {
+            setMessages(prev => [...prev, { role: 'model', text: "The section is empty. Please add some content to clean up." }]);
+            setIsLoading(false);
+            return;
+        }
+
+        try {
+            const cleanedText = await aiService.cleanUpText(section.content);
+            
+            // Save original text to chat for reference/undo
+            setMessages(prev => [...prev, { 
+                role: 'model', 
+                text: `I've updated the text for "${section.title}".\n\n**Here is the original text, just in case:**\n${section.content}` 
+            }]);
+
+            // Update the section with cleaned text
+            handleUpdateOutlineSection({ sectionId: section.id, newContent: cleanedText });
+
+        } catch (error) {
+             const errorMessage = error instanceof Error ? error.message : "An unknown error occurred.";
+             setMessages(prev => [...prev, { role: 'model', text: `Error cleaning up text: ${errorMessage}` }]);
+        } finally {
+            setIsLoading(false);
+        }
+    };
+
     const handleGenerateCharacterImage = async (characterId: string) => {
         const character = currentProject.characters.find(c => c.id === characterId);
         if (!character) return;
@@ -935,6 +965,7 @@ Use the provided project context and chat history to give insightful and relevan
             }}
             onConsistencyCheck={handleConsistencyCheck}
             onReadingLevelCheck={handleReadingLevelCheck}
+            onCleanUpText={handleCleanUpText}
             onGenerateCharacterImage={handleGenerateCharacterImage}
             onDeleteCharacterImage={handleDeleteCharacterImage}
             isGeneratingImage={isGeneratingImage}
