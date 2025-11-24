@@ -1,3 +1,4 @@
+
 import OpenAI from "openai";
 
 export interface Character {
@@ -130,4 +131,5 @@ export interface AiService {
     cleanUpText: (text: string) => Promise<string>;
     generateCharacterImage: (character: Character) => Promise<string>;
     generateIllustrationForSection: (section: OutlineSection, genre: string) => Promise<string>;
+    getGraphAnalysis: (project: Project) => Promise<string>;
 }

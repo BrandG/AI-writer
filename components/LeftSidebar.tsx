@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from 'react';
 import { Project, SelectableItem, OutlineSection, Note, TaskList } from '../types';
 import { SaveStatus, ActiveTab } from './WritingWorkspace';
@@ -119,6 +120,12 @@ const ArrowUturnRightIcon: React.FC<{className?: string}> = ({ className }) => (
 const AcademicCapIcon: React.FC<{className?: string}> = ({ className }) => (
   <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className={className}>
     <path strokeLinecap="round" strokeLinejoin="round" d="M4.26 10.147a60.436 60.436 0 0 0-.491 6.347A48.627 48.627 0 0 1 12 20.904a48.627 48.627 0 0 1 8.232-4.41 60.46 60.46 0 0 0-.491-6.347m-15.482 0a50.57 50.57 0 0 0-5.217 0-5.217 50.57 0 0 0-5.217-5.217m0 0c.838 1.657 1.874 3.238 3.086 4.728m0 0a50.57 50.57 0 0 1 5.217 5.217m-15.482 0a50.557 50.557 0 0 1 12-5.73m-12 5.73c.838-1.657 1.874-3.238 3.086-4.728m0 0a50.557 50.557 0 0 1 12 5.73M9 10l3 3m-3-3l-3 3m3-3v10" />
+  </svg>
+);
+
+const ShareIcon: React.FC<{className?: string}> = ({ className }) => (
+  <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className={className}>
+    <path strokeLinecap="round" strokeLinejoin="round" d="M7.5 14.25v2.25m3-4.5v4.5m3-6.75v6.75m3-9v9M6 20.25h12A2.25 2.25 0 0 0 20.25 18V6A2.25 2.25 0 0 0 18 3.75H6A2.25 2.25 0 0 0 3.75 6v12A2.25 2.25 0 0 0 6 20.25Z" />
   </svg>
 );
 
@@ -408,6 +415,7 @@ const LeftSidebar: React.FC<LeftSidebarProps> = ({
     { id: 'characters', label: 'Characters', icon: <UsersIcon className="h-6 w-6" /> },
     { id: 'notes', label: 'Notes', icon: <DocumentTextIcon className="h-6 w-6" /> },
     { id: 'tasks', label: 'Tasks', icon: <CheckCircleIcon className="h-6 w-6" /> },
+    { id: 'graph', label: 'Story Graph', icon: <ShareIcon className="h-6 w-6" /> },
   ];
 
   return (
@@ -609,6 +617,11 @@ const LeftSidebar: React.FC<LeftSidebarProps> = ({
                     ))}
                 </ul>
             </>
+        )}
+        {activeTab === 'graph' && (
+            <div className="text-center p-4 text-gray-400 text-sm italic">
+                Visualize your story's structure. Click nodes to jump to editors.
+            </div>
         )}
       </div>
     </aside>

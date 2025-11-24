@@ -1,3 +1,4 @@
+
 import OpenAI from "openai";
 import { Project, ChatMessage, SelectableItem, OutlineSection, Character, UnifiedAIResponse, AiService, Note } from '../types';
 import { v4 as uuidv4 } from 'uuid';
@@ -572,6 +573,65 @@ For each character, please fill out all of the following fields, being as creati
     }
 };
 
+const getGraphAnalysis = async (project: Project): Promise<string> => {
+    if (!process.env.OPENAI_API_KEY) {
+        return "AI is disabled. OpenAI API key is missing.";
+    }
+    const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY, dangerouslyAllowBrowser: true });
+
+    // Construct a textual representation of the graph
+    let graphDescription = `Project: ${project.title}\nGenre: ${project.genre}\n\n`;
+    
+    graphDescription += `NODES (Characters):\n`;
+    project.characters.forEach(c => {
+        graphDescription += `- ${c.name} (Role: ${c.storyRole})\n`;
+    });
+
+    graphDescription += `\nNODES (Outline Sections & Associations):\n`;
+    const describeSections = (sections: OutlineSection[]) => {
+        sections.forEach(s => {
+             const associatedChars = s.characterIds 
+                ? project.characters.filter(c => s.characterIds!.includes(c.id)).map(c => c.name).join(', ') 
+                : "None";
+            graphDescription += `- Scene: "${s.title}" contains characters: [${associatedChars}]\n`;
+            if (s.children) describeSections(s.children);
+        });
+    }
+    describeSections(project.outline);
+
+    const prompt = `You are a specialized Story Graph Analyst.
+    
+Analyze the following story structure based on its nodes (scenes/characters) and edges (associations).
+
+**Goal:** Identify structural weaknesses, disconnected elements, and opportunities for tighter integration.
+
+**Look for:**
+1. **Unconnected Characters:** Are there characters who rarely appear or are isolated from the main plot threads?
+2. **Plot Holes/Gaps:** Are there long sequences of scenes where key protagonists are missing?
+3. **Thematic Clustering:** Do the scenes grouped by character associations make narrative sense?
+4. **Suggestions:** Briefly suggest 1-2 ways to improve the connectivity of the story graph (e.g., "Connect Character X to Scene Y to increase tension").
+
+**Format:**
+Provide a concise bulleted list of insights. Be specific.
+
+Data:
+${graphDescription}`;
+
+    try {
+        const response = await openai.chat.completions.create({
+            model: 'gpt-4o',
+            messages: [
+                { role: 'user', content: prompt }
+            ]
+        });
+        return response.choices[0].message.content || "No response from AI.";
+    } catch (error) {
+        console.error("Error fetching graph analysis:", error);
+        return "Sorry, I encountered an error during graph analysis.";
+    }
+};
+
+
 export const openaiService: AiService = {
     generateInitialProjectData,
     getAIResponse,
@@ -580,4 +640,5 @@ export const openaiService: AiService = {
     cleanUpText,
     generateCharacterImage,
     generateIllustrationForSection,
+    getGraphAnalysis,
 };

@@ -1,9 +1,11 @@
+
 import React, { useState, useRef, useEffect } from 'react';
-import { Project, SelectableItem, OutlineSection, Character, Note, TaskList, Task } from '../types';
+import { Project, SelectableItem, OutlineSection, Character, Note, TaskList, Task, AiService } from '../types';
 import { ActiveTab } from './WritingWorkspace';
 import { getImage } from '../services/imageDbService';
 import Dropdown from './Dropdown';
 import { v4 as uuidv4 } from 'uuid';
+import StoryGraph from './StoryGraph';
 
 
 interface MainContentProps {
@@ -27,6 +29,8 @@ interface MainContentProps {
   isGeneratingIllustration: boolean;
   onDeleteCharacterImage: (characterId: string) => void;
   onDeleteIllustration: (sectionId: string) => void;
+  onNodeClick: (item: SelectableItem) => void;
+  aiService: AiService;
 }
 
 const TrashIcon: React.FC<{ className?: string }> = ({ className }) => (
@@ -723,8 +727,12 @@ const TaskListView: React.FC<{
     );
 }
 
-const MainContent: React.FC<MainContentProps> = ({ item, project, activeTab, onUpdateOutlineContent, onUpdateCharacter, onDeleteCharacterRequest, onUpdateNote, onDeleteNoteRequest, onUpdateTaskList, onDeleteTaskListRequest, onToggleCharacterAssociation, onConsistencyCheck, onReadingLevelCheck, onCleanUpText, onGenerateCharacterImage, isGeneratingImage, onGenerateIllustration, isGeneratingIllustration, onDeleteCharacterImage, onDeleteIllustration }) => {
+const MainContent: React.FC<MainContentProps> = ({ item, project, activeTab, onUpdateOutlineContent, onUpdateCharacter, onDeleteCharacterRequest, onUpdateNote, onDeleteNoteRequest, onUpdateTaskList, onDeleteTaskListRequest, onToggleCharacterAssociation, onConsistencyCheck, onReadingLevelCheck, onCleanUpText, onGenerateCharacterImage, isGeneratingImage, onGenerateIllustration, isGeneratingIllustration, onDeleteCharacterImage, onDeleteIllustration, onNodeClick, aiService }) => {
   const renderContent = () => {
+    if (activeTab === 'graph') {
+        return <StoryGraph project={project} onNodeClick={onNodeClick} aiService={aiService} />;
+    }
+
     if (activeTab === 'notes') {
         if (item?.type === 'note') {
             return <NoteView item={item} onUpdateNote={onUpdateNote} onDeleteNoteRequest={onDeleteNoteRequest} />;
@@ -779,7 +787,7 @@ const MainContent: React.FC<MainContentProps> = ({ item, project, activeTab, onU
   };
 
   return (
-    <main className="flex-1 p-10 overflow-y-auto bg-gray-900">
+    <main className={`flex-1 overflow-y-auto bg-gray-900 ${activeTab === 'graph' ? 'overflow-hidden' : 'p-10'}`}>
         {renderContent()}
     </main>
   );

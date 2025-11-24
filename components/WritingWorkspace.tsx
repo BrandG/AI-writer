@@ -1,3 +1,4 @@
+
 import React, { useState, useCallback, useEffect, useRef } from 'react';
 import { Project, SelectableItem, OutlineSection, Character, ChatMessage, AiService, Note, AiPersonality, TaskList, Task } from '../types';
 import LeftSidebar from './LeftSidebar';
@@ -112,7 +113,7 @@ interface WritingWorkspaceProps {
 }
 
 export type SaveStatus = 'unsaved' | 'saving' | 'saved' | 'error';
-export type ActiveTab = 'outline' | 'characters' | 'notes' | 'tasks';
+export type ActiveTab = 'outline' | 'characters' | 'notes' | 'tasks' | 'graph';
 
 const MAX_HISTORY = 50;
 
@@ -336,6 +337,11 @@ const WritingWorkspace: React.FC<WritingWorkspaceProps> = ({ project, onBack, on
 
   const handleSelectItem = useCallback((item: SelectableItem) => {
     setSelectedItem(item);
+    // If we are selecting an item from the graph (or elsewhere), ensure we switch to the appropriate tab
+    if (item.type === 'character') setActiveTab('characters');
+    else if (item.type === 'outline') setActiveTab('outline');
+    else if (item.type === 'note') setActiveTab('notes');
+    else if (item.type === 'taskList') setActiveTab('tasks');
   }, []);
   
   const handleUpdateOutlineTitle = (sectionId: string, newTitle: string) => {
@@ -1028,6 +1034,8 @@ Use the provided project context and chat history to give insightful and relevan
             onGenerateIllustration={handleGenerateIllustration}
             onDeleteIllustration={handleDeleteIllustration}
             isGeneratingIllustration={isGeneratingIllustration}
+            onNodeClick={handleSelectItem}
+            aiService={aiService}
         />
         <ChatSidebar 
             project={currentProject}
