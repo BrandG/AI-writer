@@ -114,9 +114,20 @@ interface WritingWorkspaceProps {
 export type SaveStatus = 'unsaved' | 'saving' | 'saved' | 'error';
 export type ActiveTab = 'outline' | 'characters' | 'notes' | 'tasks';
 
+const MAX_HISTORY = 50;
 
 const WritingWorkspace: React.FC<WritingWorkspaceProps> = ({ project, onBack, onUpdateProject, aiService }) => {
-  const [currentProject, setCurrentProject] = useState<Project>(project);
+  const [history, setHistory] = useState<{
+    past: Project[];
+    present: Project;
+    future: Project[];
+  }>({
+    past: [],
+    present: project,
+    future: []
+  });
+  const currentProject = history.present;
+
   const [activeTab, setActiveTab] = useState<ActiveTab>('outline');
   const [selectedItem, setSelectedItem] = useState<SelectableItem | null>(null);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
@@ -146,24 +157,78 @@ const WritingWorkspace: React.FC<WritingWorkspaceProps> = ({ project, onBack, on
     localStorage.setItem('aiPersonality', aiPersonality);
   }, [aiPersonality]);
 
-  // Debounced save effect
-  useEffect(() => {
-    // This effect is triggered whenever currentProject changes.
-    // It replaces the old, immediate useEffect.
 
-    // Don't save if the project is the same as the initial prop (initial load)
+    // Undo/Redo logic
+    const undo = useCallback(() => {
+        setHistory(prev => {
+            if (prev.past.length === 0) return prev;
+            const newPresent = prev.past[prev.past.length - 1];
+            const newPast = prev.past.slice(0, -1);
+            return {
+                past: newPast,
+                present: newPresent,
+                future: [prev.present, ...prev.future]
+            };
+        });
+    }, []);
+
+    const redo = useCallback(() => {
+        setHistory(prev => {
+            if (prev.future.length === 0) return prev;
+            const newPresent = prev.future[0];
+            const newFuture = prev.future.slice(1);
+            return {
+                past: [...prev.past, prev.present],
+                present: newPresent,
+                future: newFuture
+            };
+        });
+    }, []);
+
+    const updateProjectState = useCallback((updateFn: (prev: Project) => Project) => {
+        setHistory(prev => {
+            const newProject = updateFn(prev.present);
+            if (newProject === prev.present) return prev;
+            return {
+                past: [...prev.past, prev.present].slice(-MAX_HISTORY),
+                present: newProject,
+                future: []
+            };
+        });
+    }, []);
+
+    // Keyboard shortcuts for undo/redo
+    useEffect(() => {
+        const handleKeyDown = (e: KeyboardEvent) => {
+            if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'z') {
+                e.preventDefault();
+                if (e.shiftKey) {
+                    redo();
+                } else {
+                    undo();
+                }
+            } else if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'y') {
+                e.preventDefault();
+                redo();
+            }
+        };
+        window.addEventListener('keydown', handleKeyDown);
+        return () => window.removeEventListener('keydown', handleKeyDown);
+    }, [undo, redo]);
+
+
+  // Debounced save effect - watches history.present
+  useEffect(() => {
     if (currentProject === project) {
         return;
     }
     
     setSaveStatus('unsaved');
 
-    // Clear any existing timer
     if (debounceTimeoutRef.current) {
         clearTimeout(debounceTimeoutRef.current);
     }
 
-    // Set a new timer
     debounceTimeoutRef.current = window.setTimeout(async () => {
         setSaveStatus('saving');
         try {
@@ -173,9 +238,8 @@ const WritingWorkspace: React.FC<WritingWorkspaceProps> = ({ project, onBack, on
             console.error("Debounced save failed:", error);
             setSaveStatus('error');
         }
-    }, 1500); // Wait 1.5 seconds after the last change to save
+    }, 1500);
 
-    // Cleanup function to clear the timer if the component unmounts
     return () => {
         if (debounceTimeoutRef.current) {
             clearTimeout(debounceTimeoutRef.current);
@@ -183,14 +247,59 @@ const WritingWorkspace: React.FC<WritingWorkspaceProps> = ({ project, onBack, on
     };
   }, [currentProject, onUpdateProject, project]);
 
+  // Sync selectedItem with currentProject updates (e.g. from Undo/Redo)
+  useEffect(() => {
+    if (!selectedItem) return;
+
+    // Find the updated version of the selected item in the current project
+    let updatedItem: SelectableItem | undefined;
+    
+    if (selectedItem.type === 'character') {
+        updatedItem = currentProject.characters.find(c => c.id === selectedItem.id);
+    } else if (selectedItem.type === 'note') {
+        updatedItem = currentProject.notes.find(n => n.id === selectedItem.id);
+    } else if (selectedItem.type === 'taskList') {
+        updatedItem = currentProject.taskLists?.find(t => t.id === selectedItem.id);
+    } else if (selectedItem.type === 'outline') {
+        // Recursive find
+        const findSection = (sections: OutlineSection[]): OutlineSection | undefined => {
+            for (const s of sections) {
+                if (s.id === selectedItem.id) return s;
+                if (s.children) {
+                    const found = findSection(s.children);
+                    if (found) return found;
+                }
+            }
+            return undefined;
+        }
+        updatedItem = findSection(currentProject.outline);
+    }
+
+    // If item exists in new state, update selection to match new state
+    if (updatedItem && updatedItem !== selectedItem) {
+        setSelectedItem(updatedItem);
+    } 
+    // If item does NOT exist (e.g. we undid a creation or redid a deletion)
+    else if (!updatedItem) {
+        setSelectedItem(null); 
+    }
+
+  }, [currentProject]);
 
 
   // This effect handles both switching projects and syncing updates from the parent.
   useEffect(() => {
     // A true project switch (different ID) triggers a full state reset.
     if (project.id !== currentProjectId) {
-      setCurrentProjectId(project.id); // Track the new ID
-      setCurrentProject(project);
+      setCurrentProjectId(project.id);
+      
+      // Reset history
+      setHistory({
+        past: [],
+        present: project,
+        future: []
+      });
+
       const initialSelectedItem = project.outline[0] || project.characters[0] || project.notes[0] || project.taskLists?.[0] || null;
       setSelectedItem(initialSelectedItem);
       
@@ -206,10 +315,9 @@ const WritingWorkspace: React.FC<WritingWorkspaceProps> = ({ project, onBack, on
       setIsLoading(false);
       setSaveStatus('saved');
     } else {
-      // This is just a data sync from the parent after a save.
-      // We update the local project state to match the parent, but preserve UI state
-      // like the active tab and selected item. This prevents resetting the view on every auto-save.
-      setCurrentProject(project);
+      // Used for initial load mostly. We avoid overwriting history on basic prop updates to preserve undo stack.
+      // If we strictly needed to sync external changes, we'd need more complex logic.
+      // For now, we trust local history as the source of truth while the workspace is active.
     }
   }, [project, currentProjectId]);
 
@@ -231,24 +339,13 @@ const WritingWorkspace: React.FC<WritingWorkspaceProps> = ({ project, onBack, on
   }, []);
   
   const handleUpdateOutlineTitle = (sectionId: string, newTitle: string) => {
-    setCurrentProject(prevProject => {
+    updateProjectState(prevProject => {
         const newOutline = updateTitleRecursively(prevProject.outline, sectionId, newTitle);
-        const updatedProject = { ...prevProject, outline: newOutline };
-        
-        return updatedProject;
+        return { ...prevProject, outline: newOutline };
     });
-     if (selectedItem?.id === sectionId && selectedItem.type === 'outline') {
-        setSelectedItem(prev => {
-            if (prev?.type === 'outline' && prev.id === sectionId) {
-                return { ...prev, title: newTitle };
-            }
-            return prev;
-        });
-    }
   };
 
     const handleAddOutlineSection = (args: { parentId?: string; title: string; content?: string }) => {
-        // FIX: Destructured `title`, `content`, and `parentId` from the `args` object to resolve reference errors.
         const { title, content, parentId } = args;
         const newSection: OutlineSection = {
             id: uuidv4(),
@@ -259,7 +356,7 @@ const WritingWorkspace: React.FC<WritingWorkspaceProps> = ({ project, onBack, on
             includeInExport: true,
         };
 
-        setCurrentProject(prevProject => {
+        updateProjectState(prevProject => {
             let newOutline;
             if (parentId) {
                 newOutline = addSubItemRecursively(prevProject.outline, parentId, newSection);
@@ -268,6 +365,10 @@ const WritingWorkspace: React.FC<WritingWorkspaceProps> = ({ project, onBack, on
             }
             return { ...prevProject, outline: newOutline };
         });
+        
+        // Select the new item explicitly
+        setSelectedItem(newSection);
+
         return { success: true, message: `Section '${title}' added successfully.` };
     };
 
@@ -277,22 +378,15 @@ const WritingWorkspace: React.FC<WritingWorkspaceProps> = ({ project, onBack, on
         if (newTitle) updates.title = newTitle;
         if (newContent) updates.content = newContent;
 
-        setCurrentProject(prevProject => {
+        updateProjectState(prevProject => {
             const newOutline = updateSectionRecursively(prevProject.outline, sectionId, updates);
             return { ...prevProject, outline: newOutline };
-        });
-
-        setSelectedItem(prev => {
-            if (prev?.id === sectionId && prev.type === 'outline') {
-                return { ...prev, ...updates };
-            }
-            return prev;
         });
         return { success: true, message: `Section updated successfully.` };
     };
 
     const handleToggleOutlineExport = (sectionId: string) => {
-        setCurrentProject(prevProject => {
+        updateProjectState(prevProject => {
             const newOutline = toggleExportRecursively(prevProject.outline, sectionId);
             return { ...prevProject, outline: newOutline };
         });
@@ -300,15 +394,9 @@ const WritingWorkspace: React.FC<WritingWorkspaceProps> = ({ project, onBack, on
 
     const handleDeleteOutlineSection = (args: { sectionId: string }) => {
         const { sectionId } = args;
-        setCurrentProject(prevProject => {
+        updateProjectState(prevProject => {
             const newOutline = deleteSectionRecursively(prevProject.outline, sectionId);
-            const updatedProject = { ...prevProject, outline: newOutline };
-
-            // If the deleted item was selected, deselect it
-            if (selectedItem?.id === sectionId) {
-                setSelectedItem(null);
-            }
-            return updatedProject;
+            return { ...prevProject, outline: newOutline };
         });
         return { success: true, message: "Section deleted successfully." };
     };
@@ -324,7 +412,7 @@ const WritingWorkspace: React.FC<WritingWorkspaceProps> = ({ project, onBack, on
         // Prevent moving a section into itself
         if (sectionId === targetParentId || sectionId === targetSiblingId) return;
 
-        setCurrentProject(prevProject => {
+        updateProjectState(prevProject => {
             let movedItem: OutlineSection | null = null;
 
             // 1. Immutably find and remove the item from the tree
@@ -410,32 +498,27 @@ const WritingWorkspace: React.FC<WritingWorkspaceProps> = ({ project, onBack, on
             id: uuidv4(),
             type: 'character',
         };
-        setCurrentProject(prevProject => ({
+        updateProjectState(prevProject => ({
             ...prevProject,
             characters: [...prevProject.characters, newCharacter],
         }));
+        
+        setSelectedItem(newCharacter);
         return { success: true, message: `Character '${args.name}' added successfully.` };
     };
 
     const handleUpdateCharacter = (characterId: string, updatedData: Partial<Character>) => {
-        setCurrentProject(prevProject => {
+        updateProjectState(prevProject => {
             const newCharacters = prevProject.characters.map(char =>
                 char.id === characterId ? { ...char, ...updatedData } : char
             );
             return { ...prevProject, characters: newCharacters };
         });
-        
-        setSelectedItem(prev => {
-            if (prev?.id === characterId && prev.type === 'character') {
-                return { ...prev, ...updatedData };
-            }
-            return prev;
-        });
         return { success: true, message: `Character updated successfully.` };
     };
     
     const handleDeleteCharacter = (args: { characterId: string }) => {
-        setCurrentProject(prevProject => {
+        updateProjectState(prevProject => {
             const updatedProject = {
                 ...prevProject,
                 characters: prevProject.characters.filter(c => c.id !== args.characterId),
@@ -454,10 +537,6 @@ const WritingWorkspace: React.FC<WritingWorkspaceProps> = ({ project, onBack, on
                 });
             };
             updatedProject.outline = cleanOutline(updatedProject.outline);
-            
-            if (selectedItem?.id === args.characterId) {
-                setSelectedItem(null);
-            }
             return updatedProject;
         });
         return { success: true, message: "Character deleted successfully." };
@@ -471,7 +550,7 @@ const WritingWorkspace: React.FC<WritingWorkspaceProps> = ({ project, onBack, on
             title: 'New Note',
             content: '',
         };
-        setCurrentProject(prev => ({
+        updateProjectState(prev => ({
             ...prev,
             notes: [...prev.notes, newNote],
         }));
@@ -479,26 +558,15 @@ const WritingWorkspace: React.FC<WritingWorkspaceProps> = ({ project, onBack, on
     };
 
     const handleUpdateNote = (noteId: string, updates: Partial<Note>) => {
-        setCurrentProject(prev => ({
+        updateProjectState(prev => ({
             ...prev,
             notes: prev.notes.map(n => n.id === noteId ? { ...n, ...updates } : n),
         }));
-
-        setSelectedItem(prev => {
-            if (prev?.id === noteId && prev.type === 'note') {
-                return { ...prev, ...updates };
-            }
-            return prev;
-        });
     };
 
     const handleDeleteNote = (noteId: string) => {
-        setCurrentProject(prev => {
+        updateProjectState(prev => {
             const newNotes = prev.notes.filter(n => n.id !== noteId);
-            if (selectedItem?.id === noteId) {
-                // If the deleted note was selected, select the first available note or null
-                setSelectedItem(newNotes[0] || null);
-            }
             return { ...prev, notes: newNotes };
         });
     };
@@ -511,33 +579,23 @@ const WritingWorkspace: React.FC<WritingWorkspaceProps> = ({ project, onBack, on
             title: 'New List',
             tasks: [],
         };
-        setCurrentProject(prev => ({
+        updateProjectState(prev => ({
             ...prev,
-            taskLists: [...(prev.taskLists || []), newList], // Handle undefined for legacy projects
+            taskLists: [...(prev.taskLists || []), newList],
         }));
         setSelectedItem(newList);
     };
 
     const handleUpdateTaskList = (listId: string, updates: Partial<TaskList>) => {
-        setCurrentProject(prev => ({
+        updateProjectState(prev => ({
             ...prev,
             taskLists: (prev.taskLists || []).map(l => l.id === listId ? { ...l, ...updates } : l),
         }));
-
-        setSelectedItem(prev => {
-            if (prev?.id === listId && prev.type === 'taskList') {
-                return { ...prev, ...updates };
-            }
-            return prev;
-        });
     };
 
     const handleDeleteTaskList = (listId: string) => {
-        setCurrentProject(prev => {
+        updateProjectState(prev => {
             const newLists = (prev.taskLists || []).filter(l => l.id !== listId);
-            if (selectedItem?.id === listId) {
-                setSelectedItem(newLists[0] || null);
-            }
             return { ...prev, taskLists: newLists };
         });
     };
@@ -671,15 +729,9 @@ const WritingWorkspace: React.FC<WritingWorkspaceProps> = ({ project, onBack, on
         setIsGeneratingIllustration(true);
         try {
             const base64Image = await aiService.generateIllustrationForSection(section, currentProject.genre);
-            setCurrentProject(prevProject => {
+            updateProjectState(prevProject => {
                 const newOutline = updateSectionRecursively(prevProject.outline, sectionId, { imageUrl: base64Image });
                 return { ...prevProject, outline: newOutline };
-            });
-            setSelectedItem(prev => {
-                if (prev?.id === sectionId && prev.type === 'outline') {
-                    return { ...prev, imageUrl: base64Image };
-                }
-                return prev;
             });
         } catch (error) {
             console.error(error);
@@ -711,16 +763,9 @@ const WritingWorkspace: React.FC<WritingWorkspaceProps> = ({ project, onBack, on
             }
         }
 
-        setCurrentProject(prevProject => {
+        updateProjectState(prevProject => {
             const newOutline = updateSectionRecursively(prevProject.outline, sectionId, { imageUrl: undefined });
             return { ...prevProject, outline: newOutline };
-        });
-
-        setSelectedItem(prev => {
-            if (prev?.id === sectionId && prev.type === 'outline') {
-                return { ...prev, imageUrl: undefined };
-            }
-            return prev;
         });
     };
 
@@ -935,6 +980,10 @@ Use the provided project context and chat history to give insightful and relevan
             saveStatus={saveStatus}
             isCollapsed={isSidebarCollapsed}
             onToggleCollapse={toggleSidebar}
+            onUndo={undo}
+            onRedo={redo}
+            canUndo={history.past.length > 0}
+            canRedo={history.future.length > 0}
         />
         <MainContent 
             item={selectedItem}
@@ -948,20 +997,10 @@ Use the provided project context and chat history to give insightful and relevan
             onUpdateTaskList={handleUpdateTaskList}
             onDeleteTaskListRequest={(list) => setTaskListToDelete(list)}
             onToggleCharacterAssociation={(sectionId, characterId) => {
-                setCurrentProject(prevProject => ({
+                updateProjectState(prevProject => ({
                     ...prevProject,
                     outline: toggleCharacterAssociationRecursively(prevProject.outline, sectionId, characterId)
                 }));
-                setSelectedItem(prevSelectedItem => {
-                    if (prevSelectedItem?.id === sectionId && prevSelectedItem.type === 'outline') {
-                        const currentIds = prevSelectedItem.characterIds || [];
-                        const newIds = currentIds.includes(characterId)
-                            ? currentIds.filter(id => id !== characterId)
-                            : [...currentIds, characterId];
-                        return { ...prevSelectedItem, characterIds: newIds };
-                    }
-                    return prevSelectedItem;
-                });
             }}
             onConsistencyCheck={handleConsistencyCheck}
             onReadingLevelCheck={handleReadingLevelCheck}

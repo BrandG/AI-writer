@@ -26,6 +26,10 @@ interface LeftSidebarProps {
   saveStatus: SaveStatus;
   isCollapsed: boolean;
   onToggleCollapse: () => void;
+  onUndo: () => void;
+  onRedo: () => void;
+  canUndo: boolean;
+  canRedo: boolean;
 }
 
 const ArrowLeftIcon: React.FC<{className?: string}> = ({ className }) => (
@@ -86,6 +90,18 @@ const ChevronDoubleRightIcon: React.FC<{className?: string}> = ({ className }) =
     <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className={className}>
       <path strokeLinecap="round" strokeLinejoin="round" d="m5.25 4.5 7.5 7.5-7.5 7.5m6-15 7.5 7.5-7.5-7.5" />
     </svg>
+);
+
+const ArrowUturnLeftIcon: React.FC<{className?: string}> = ({ className }) => (
+  <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className={className}>
+    <path strokeLinecap="round" strokeLinejoin="round" d="M9 15 3 9m0 0 6-6M3 9h12a6 6 0 0 1 0 12h-3" />
+  </svg>
+);
+
+const ArrowUturnRightIcon: React.FC<{className?: string}> = ({ className }) => (
+  <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className={className}>
+    <path strokeLinecap="round" strokeLinejoin="round" d="m15 15 6-6m0 0-6-6m6 6H9a6 6 0 0 0 0 12h3" />
+  </svg>
 );
 
 interface DragOverInfo {
@@ -363,7 +379,8 @@ const LeftSidebar: React.FC<LeftSidebarProps> = ({
     onUpdateOutlineTitle, onToggleOutlineExport, onAddSubItem, onAddRootItem, 
     onDeleteOutlineSection, onReorderOutline, onAddNote, onDeleteNoteRequest, 
     onAddTaskList, onDeleteTaskListRequest,
-    saveStatus, isCollapsed, onToggleCollapse 
+    saveStatus, isCollapsed, onToggleCollapse,
+    onUndo, onRedo, canUndo, canRedo
 }) => {
   const [draggedItemId, setDraggedItemId] = useState<string | null>(null);
   const [dragOverInfo, setDragOverInfo] = useState<DragOverInfo | null>(null);
@@ -400,7 +417,27 @@ const LeftSidebar: React.FC<LeftSidebarProps> = ({
         <div className={isCollapsed ? 'hidden' : ''}>
             <h1 className="text-2xl font-bold truncate pr-8">{project.title}</h1>
             <h2 className="text-sm text-gray-400 mb-2">{project.genre}</h2>
-            <StatusIndicator status={saveStatus} />
+            
+            <div className="flex items-center gap-1 mt-2 mb-2">
+                <button 
+                    onClick={onUndo} 
+                    disabled={!canUndo} 
+                    className="p-1 text-gray-400 hover:text-white disabled:opacity-30 disabled:hover:text-gray-400 rounded hover:bg-gray-700" 
+                    title="Undo (Ctrl+Z)"
+                >
+                    <ArrowUturnLeftIcon className="h-5 w-5" />
+                </button>
+                <button 
+                    onClick={onRedo} 
+                    disabled={!canRedo} 
+                    className="p-1 text-gray-400 hover:text-white disabled:opacity-30 disabled:hover:text-gray-400 rounded hover:bg-gray-700" 
+                    title="Redo (Ctrl+Shift+Z)"
+                >
+                    <ArrowUturnRightIcon className="h-5 w-5" />
+                </button>
+                <div className="flex-grow"></div>
+                <StatusIndicator status={saveStatus} />
+            </div>
         </div>
       </header>
 

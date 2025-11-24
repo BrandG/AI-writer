@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useLayoutEffect } from 'react';
 import { ChatMessage, Project, AiPersonality } from '../types';
 
 interface ChatSidebarProps {
@@ -67,13 +67,13 @@ const ChatSidebar: React.FC<ChatSidebarProps> = ({ project, messages, isLoading,
   };
 
   // Effect to auto-resize textarea based on content
-  useEffect(() => {
+  useLayoutEffect(() => {
     const textarea = textareaRef.current;
     if (textarea) {
       textarea.style.height = 'auto'; // Reset height to allow shrinking
       textarea.style.height = `${textarea.scrollHeight}px`; // Set to new scroll height
     }
-  }, [userInput]);
+  }, [userInput, isCollapsed]);
 
   return (
     <aside className={`bg-gray-800 flex flex-col border-l border-gray-700 transition-all duration-300 ease-in-out relative ${isCollapsed ? 'w-0 p-0 border-none' : 'w-1/3 max-w-md p-4'}`}>
