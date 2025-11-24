@@ -1,8 +1,9 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Project, SelectableItem, OutlineSection, Character, Note } from '../types';
+import { Project, SelectableItem, OutlineSection, Character, Note, TaskList, Task } from '../types';
 import { ActiveTab } from './WritingWorkspace';
 import { getImage } from '../services/imageDbService';
 import Dropdown from './Dropdown';
+import { v4 as uuidv4 } from 'uuid';
 
 
 interface MainContentProps {
@@ -14,6 +15,8 @@ interface MainContentProps {
   onDeleteCharacterRequest: (character: Character) => void;
   onUpdateNote: (noteId: string, updates: Partial<Note>) => void;
   onDeleteNoteRequest: (note: Note) => void;
+  onUpdateTaskList: (listId: string, updates: Partial<TaskList>) => void;
+  onDeleteTaskListRequest: (list: TaskList) => void;
   onToggleCharacterAssociation: (sectionId: string, characterId: string) => void;
   onConsistencyCheck: (section: OutlineSection) => void;
   onGenerateCharacterImage: (characterId: string) => void;
@@ -45,6 +48,12 @@ const ChevronDownIcon: React.FC<{className?: string}> = ({ className }) => (
 const PhotoIcon: React.FC<{className?: string}> = ({ className }) => (
     <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className={className}>
       <path strokeLinecap="round" strokeLinejoin="round" d="M2.25 15.75l5.159-5.159a2.25 2.25 0 0 1 3.182 0l5.159 5.159m-1.5-1.5 1.409-1.409a2.25 2.25 0 0 1 3.182 0l2.909 2.909m-18 3.75h16.5a1.5 1.5 0 0 0 1.5-1.5V6a1.5 1.5 0 0 0-1.5-1.5H3.75A1.5 1.5 0 0 0 2.25 6v12a1.5 1.5 0 0 0 1.5 1.5Zm10.5-11.25h.008v.008h-.008V8.25Zm.375 0a.375.375 0 1 1-.75 0 .375.375 0 0 1 .75 0Z" />
+    </svg>
+);
+
+const PlusIcon: React.FC<{className?: string}> = ({ className }) => (
+    <svg xmlns="http://www.w3.org/2000/svg" className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor">
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
     </svg>
 );
 
@@ -584,13 +593,146 @@ const NoteView: React.FC<{
   );
 };
 
-const MainContent: React.FC<MainContentProps> = ({ item, project, activeTab, onUpdateOutlineContent, onUpdateCharacter, onDeleteCharacterRequest, onUpdateNote, onDeleteNoteRequest, onToggleCharacterAssociation, onConsistencyCheck, onGenerateCharacterImage, isGeneratingImage, onGenerateIllustration, isGeneratingIllustration, onDeleteCharacterImage, onDeleteIllustration }) => {
+const TaskListView: React.FC<{
+    item: TaskList;
+    onUpdateTaskList: (listId: string, updates: Partial<TaskList>) => void;
+    onDeleteTaskListRequest: (list: TaskList) => void;
+}> = ({ item, onUpdateTaskList, onDeleteTaskListRequest }) => {
+    const [newTaskText, setNewTaskText] = useState('');
+
+    const handleAddTask = (e: React.FormEvent) => {
+        e.preventDefault();
+        if (!newTaskText.trim()) return;
+
+        const newTask: Task = {
+            id: uuidv4(),
+            text: newTaskText.trim(),
+            isCompleted: false,
+        };
+
+        const updatedTasks = [...item.tasks, newTask];
+        onUpdateTaskList(item.id, { tasks: updatedTasks });
+        setNewTaskText('');
+    };
+
+    const handleToggleTask = (taskId: string) => {
+        const updatedTasks = item.tasks.map(t => 
+            t.id === taskId ? { ...t, isCompleted: !t.isCompleted } : t
+        );
+        onUpdateTaskList(item.id, { tasks: updatedTasks });
+    };
+
+    const handleDeleteTask = (taskId: string) => {
+        const updatedTasks = item.tasks.filter(t => t.id !== taskId);
+        onUpdateTaskList(item.id, { tasks: updatedTasks });
+    };
+
+    const completedCount = item.tasks.filter(t => t.isCompleted).length;
+    const totalCount = item.tasks.length;
+    const progress = totalCount === 0 ? 0 : Math.round((completedCount / totalCount) * 100);
+
+    return (
+        <>
+            <div className="mb-8">
+                 <input
+                    key={`${item.id}-title`}
+                    defaultValue={item.title}
+                    onBlur={(e) => e.target.value.trim() && onUpdateTaskList(item.id, { title: e.target.value.trim() })}
+                    aria-label="List title"
+                    className="w-full text-4xl font-bold text-cyan-300 bg-transparent rounded-md p-2 -m-2 focus:outline-none focus:bg-gray-800 focus:ring-2 focus:ring-cyan-500"
+                />
+            </div>
+
+            <div className="mb-6 bg-gray-800/50 rounded-lg p-4 border border-gray-700">
+                <div className="flex justify-between text-sm text-gray-400 mb-2">
+                    <span>Progress</span>
+                    <span>{progress}%</span>
+                </div>
+                <div className="w-full bg-gray-700 rounded-full h-2.5">
+                    <div 
+                        className="bg-cyan-500 h-2.5 rounded-full transition-all duration-500 ease-out" 
+                        style={{ width: `${progress}%` }}
+                    ></div>
+                </div>
+            </div>
+
+            <form onSubmit={handleAddTask} className="mb-8 flex gap-2">
+                <input 
+                    type="text"
+                    value={newTaskText}
+                    onChange={(e) => setNewTaskText(e.target.value)}
+                    placeholder="Add a new task..."
+                    className="flex-grow bg-gray-800 border border-gray-700 rounded-md p-3 text-gray-200 focus:outline-none focus:ring-2 focus:ring-cyan-500"
+                />
+                <button 
+                    type="submit"
+                    disabled={!newTaskText.trim()}
+                    className="bg-cyan-600 hover:bg-cyan-500 text-white font-semibold py-2 px-4 rounded-md transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                    <PlusIcon className="h-6 w-6" />
+                </button>
+            </form>
+
+            <ul className="space-y-3">
+                {item.tasks.map(task => (
+                    <li key={task.id} className="group flex items-center bg-gray-800/30 rounded-md p-3 border border-gray-700 hover:border-gray-600 transition-all">
+                        <button
+                            onClick={() => handleToggleTask(task.id)}
+                            className={`flex-shrink-0 w-6 h-6 rounded border mr-4 flex items-center justify-center transition-colors focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-gray-900 focus:ring-cyan-500 ${task.isCompleted ? 'bg-cyan-600 border-cyan-600 text-white' : 'border-gray-500 hover:border-cyan-400'}`}
+                            aria-label={task.isCompleted ? "Mark as incomplete" : "Mark as complete"}
+                        >
+                            {task.isCompleted && (
+                                <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" viewBox="0 0 20 20" fill="currentColor">
+                                    <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+                                </svg>
+                            )}
+                        </button>
+                        <span className={`flex-grow text-lg transition-all ${task.isCompleted ? 'text-gray-500 line-through' : 'text-gray-200'}`}>
+                            {task.text}
+                        </span>
+                        <button
+                            onClick={() => handleDeleteTask(task.id)}
+                            className="p-2 text-gray-500 hover:text-red-400 opacity-0 group-hover:opacity-100 focus:opacity-100 transition-opacity"
+                            aria-label="Delete task"
+                        >
+                            <TrashIcon className="h-5 w-5" />
+                        </button>
+                    </li>
+                ))}
+                {item.tasks.length === 0 && (
+                    <li className="text-center text-gray-500 py-8 italic">
+                        No tasks yet. Add one above to get started!
+                    </li>
+                )}
+            </ul>
+
+            <div className="mt-12 pt-6 border-t border-gray-700">
+                <button
+                    onClick={() => onDeleteTaskListRequest(item)}
+                    className="w-full max-w-xs mx-auto flex items-center justify-center p-3 rounded-md text-sm bg-transparent border border-red-500/50 text-red-400 hover:bg-red-500/20 hover:text-red-300 font-semibold transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-red-500"
+                >
+                    <TrashIcon className="h-5 w-5 mr-2" />
+                    Delete List
+                </button>
+            </div>
+        </>
+    );
+}
+
+const MainContent: React.FC<MainContentProps> = ({ item, project, activeTab, onUpdateOutlineContent, onUpdateCharacter, onDeleteCharacterRequest, onUpdateNote, onDeleteNoteRequest, onUpdateTaskList, onDeleteTaskListRequest, onToggleCharacterAssociation, onConsistencyCheck, onGenerateCharacterImage, isGeneratingImage, onGenerateIllustration, isGeneratingIllustration, onDeleteCharacterImage, onDeleteIllustration }) => {
   const renderContent = () => {
     if (activeTab === 'notes') {
         if (item?.type === 'note') {
             return <NoteView item={item} onUpdateNote={onUpdateNote} onDeleteNoteRequest={onDeleteNoteRequest} />;
         }
         return <p className="text-gray-500">Select a note from the sidebar, or create a new one.</p>;
+    }
+
+    if (activeTab === 'tasks') {
+        if (item?.type === 'taskList') {
+             return <TaskListView item={item} onUpdateTaskList={onUpdateTaskList} onDeleteTaskListRequest={onDeleteTaskListRequest} />;
+        }
+        return <p className="text-gray-500">Select a list from the sidebar, or create a new one.</p>;
     }
 
     if (!item) {

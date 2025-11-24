@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Project, SelectableItem, OutlineSection, Note } from '../types';
+import { Project, SelectableItem, OutlineSection, Note, TaskList } from '../types';
 import { SaveStatus, ActiveTab } from './WritingWorkspace';
 import StatusIndicator from './StatusIndicator';
 import Dropdown from './Dropdown';
@@ -21,6 +21,8 @@ interface LeftSidebarProps {
   onReorderOutline: (draggedId: string, targetId: string, position: 'above' | 'below' | 'on') => void;
   onAddNote: () => void;
   onDeleteNoteRequest: (note: Note) => void;
+  onAddTaskList: () => void;
+  onDeleteTaskListRequest: (list: TaskList) => void;
   saveStatus: SaveStatus;
   isCollapsed: boolean;
   onToggleCollapse: () => void;
@@ -65,6 +67,12 @@ const UsersIcon: React.FC<{className?: string}> = ({ className }) => (
 const DocumentTextIcon: React.FC<{className?: string}> = ({ className }) => (
     <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className={className}>
       <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 0 0-3.375-3.375h-1.5A1.125 1.125 0 0 1 13.5 7.125v-1.5a3.375 3.375 0 0 0-3.375-3.375H8.25m2.25 0H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 0 0-9-9Z" />
+    </svg>
+);
+
+const CheckCircleIcon: React.FC<{className?: string}> = ({ className }) => (
+    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className={className}>
+        <path strokeLinecap="round" strokeLinejoin="round" d="M9 12.75 11.25 15 15 9.75M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z" />
     </svg>
 );
 
@@ -304,12 +312,13 @@ const OutlineItem: React.FC<OutlineItemProps> = ({
     );
 };
 
-const NoteItem: React.FC<{
-    note: Note;
+const SimpleListItem: React.FC<{
+    title: string;
     isSelected: boolean;
     onSelect: () => void;
     onDeleteRequest: () => void;
-}> = ({ note, isSelected, onSelect, onDeleteRequest }) => {
+    deleteLabel: string;
+}> = ({ title, isSelected, onSelect, onDeleteRequest, deleteLabel }) => {
     return (
         <li className={`group flex items-center justify-between rounded-md my-1 pr-2 transition-colors duration-150 ${isSelected ? 'bg-cyan-600/20' : 'hover:bg-gray-700/50'}`}>
             <a
@@ -317,13 +326,13 @@ const NoteItem: React.FC<{
                 onClick={(e) => { e.preventDefault(); onSelect(); }}
                 className={`block p-2 rounded-md text-sm flex-grow truncate transition-all duration-200 ${isSelected ? 'text-cyan-300 font-semibold' : 'text-gray-300 group-hover:text-white'}`}
             >
-                {note.title}
+                {title}
             </a>
             <div className="ml-2 flex-shrink-0 opacity-0 group-hover:opacity-100 focus-within:opacity-100 transition-opacity">
                 <Dropdown
                     trigger={
                         <button
-                            aria-label={`Actions for ${note.title}`}
+                            aria-label={`Actions for ${title}`}
                             className="p-1 rounded-full text-gray-400 hover:bg-gray-600 hover:text-white"
                         >
                             <EllipsisVerticalIcon className="h-4 w-4" />
@@ -338,7 +347,7 @@ const NoteItem: React.FC<{
                                 className="w-full text-left text-red-400 block px-4 py-2 text-sm hover:bg-gray-700 hover:text-red-300"
                                 role="menuitem"
                             >
-                                Delete Note
+                                {deleteLabel}
                             </button>
                         </div>
                     )}
@@ -353,6 +362,7 @@ const LeftSidebar: React.FC<LeftSidebarProps> = ({
     project, activeTab, setActiveTab, selectedItem, onSelectItem, onBack, 
     onUpdateOutlineTitle, onToggleOutlineExport, onAddSubItem, onAddRootItem, 
     onDeleteOutlineSection, onReorderOutline, onAddNote, onDeleteNoteRequest, 
+    onAddTaskList, onDeleteTaskListRequest,
     saveStatus, isCollapsed, onToggleCollapse 
 }) => {
   const [draggedItemId, setDraggedItemId] = useState<string | null>(null);
@@ -362,6 +372,7 @@ const LeftSidebar: React.FC<LeftSidebarProps> = ({
     { id: 'outline', label: 'Outline', icon: <ListBulletIcon className="h-6 w-6" /> },
     { id: 'characters', label: 'Characters', icon: <UsersIcon className="h-6 w-6" /> },
     { id: 'notes', label: 'Notes', icon: <DocumentTextIcon className="h-6 w-6" /> },
+    { id: 'tasks', label: 'Tasks', icon: <CheckCircleIcon className="h-6 w-6" /> },
   ];
 
   return (
@@ -471,12 +482,39 @@ const LeftSidebar: React.FC<LeftSidebarProps> = ({
                 </div>
                 <ul>
                     {project.notes.map(note => (
-                        <NoteItem
+                        <SimpleListItem
                             key={note.id}
-                            note={note}
+                            title={note.title}
                             isSelected={selectedItem?.id === note.id}
                             onSelect={() => onSelectItem(note)}
                             onDeleteRequest={() => onDeleteNoteRequest(note)}
+                            deleteLabel="Delete Note"
+                        />
+                    ))}
+                </ul>
+            </>
+        )}
+         {activeTab === 'tasks' && (
+            <>
+                <div className="px-1 mb-2">
+                    <button
+                        onClick={onAddTaskList}
+                        className="w-full flex items-center justify-center p-2 rounded-md text-sm bg-gray-700 hover:bg-gray-600 text-cyan-400 font-semibold transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-cyan-500"
+                        aria-label="Add new list"
+                    >
+                        <PlusIcon className="h-4 w-4 mr-2" />
+                        Add New List
+                    </button>
+                </div>
+                <ul>
+                    {(project.taskLists || []).map(list => (
+                         <SimpleListItem
+                            key={list.id}
+                            title={list.title}
+                            isSelected={selectedItem?.id === list.id}
+                            onSelect={() => onSelectItem(list)}
+                            onDeleteRequest={() => onDeleteTaskListRequest(list)}
+                            deleteLabel="Delete List"
                         />
                     ))}
                 </ul>

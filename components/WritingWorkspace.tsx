@@ -1,5 +1,5 @@
 import React, { useState, useCallback, useEffect, useRef } from 'react';
-import { Project, SelectableItem, OutlineSection, Character, ChatMessage, AiService, Note, AiPersonality } from '../types';
+import { Project, SelectableItem, OutlineSection, Character, ChatMessage, AiService, Note, AiPersonality, TaskList, Task } from '../types';
 import LeftSidebar from './LeftSidebar';
 import MainContent from './MainContent';
 import ChatSidebar from './ChatSidebar';
@@ -112,7 +112,7 @@ interface WritingWorkspaceProps {
 }
 
 export type SaveStatus = 'unsaved' | 'saving' | 'saved' | 'error';
-export type ActiveTab = 'outline' | 'characters' | 'notes';
+export type ActiveTab = 'outline' | 'characters' | 'notes' | 'tasks';
 
 
 const WritingWorkspace: React.FC<WritingWorkspaceProps> = ({ project, onBack, onUpdateProject, aiService }) => {
@@ -130,6 +130,7 @@ const WritingWorkspace: React.FC<WritingWorkspaceProps> = ({ project, onBack, on
   const [saveStatus, setSaveStatus] = useState<SaveStatus>('saved');
   const [characterToDelete, setCharacterToDelete] = useState<Character | null>(null);
   const [noteToDelete, setNoteToDelete] = useState<Note | null>(null);
+  const [taskListToDelete, setTaskListToDelete] = useState<TaskList | null>(null);
   const [aiPersonality, setAiPersonality] = useState<AiPersonality>(
     () => (localStorage.getItem('aiPersonality') as AiPersonality) || 'assistant'
   );
@@ -190,12 +191,13 @@ const WritingWorkspace: React.FC<WritingWorkspaceProps> = ({ project, onBack, on
     if (project.id !== currentProjectId) {
       setCurrentProjectId(project.id); // Track the new ID
       setCurrentProject(project);
-      const initialSelectedItem = project.outline[0] || project.characters[0] || project.notes[0] || null;
+      const initialSelectedItem = project.outline[0] || project.characters[0] || project.notes[0] || project.taskLists?.[0] || null;
       setSelectedItem(initialSelectedItem);
       
       let initialTab: ActiveTab = 'outline';
       if (initialSelectedItem?.type === 'character') initialTab = 'characters';
       if (initialSelectedItem?.type === 'note') initialTab = 'notes';
+      if (initialSelectedItem?.type === 'taskList') initialTab = 'tasks';
       setActiveTab(initialTab);
 
       const initialMessage = { role: 'model' as const, text: `Hello! How can I help you with '${project.title}' today?` };
@@ -219,6 +221,8 @@ const WritingWorkspace: React.FC<WritingWorkspaceProps> = ({ project, onBack, on
         setSelectedItem(currentProject.characters[0] || null);
     } else if (tab === 'outline' && (selectedItem?.type !== 'outline' || !selectedItem)) {
         setSelectedItem(currentProject.outline[0] || null);
+    } else if (tab === 'tasks' && (selectedItem?.type !== 'taskList' || !selectedItem)) {
+        setSelectedItem(currentProject.taskLists?.[0] || null);
     }
   }, [currentProject, selectedItem]);
 
@@ -496,6 +500,45 @@ const WritingWorkspace: React.FC<WritingWorkspaceProps> = ({ project, onBack, on
                 setSelectedItem(newNotes[0] || null);
             }
             return { ...prev, notes: newNotes };
+        });
+    };
+
+    // Task List Handlers
+    const handleAddTaskList = () => {
+        const newList: TaskList = {
+            id: uuidv4(),
+            type: 'taskList',
+            title: 'New List',
+            tasks: [],
+        };
+        setCurrentProject(prev => ({
+            ...prev,
+            taskLists: [...(prev.taskLists || []), newList], // Handle undefined for legacy projects
+        }));
+        setSelectedItem(newList);
+    };
+
+    const handleUpdateTaskList = (listId: string, updates: Partial<TaskList>) => {
+        setCurrentProject(prev => ({
+            ...prev,
+            taskLists: (prev.taskLists || []).map(l => l.id === listId ? { ...l, ...updates } : l),
+        }));
+
+        setSelectedItem(prev => {
+            if (prev?.id === listId && prev.type === 'taskList') {
+                return { ...prev, ...updates };
+            }
+            return prev;
+        });
+    };
+
+    const handleDeleteTaskList = (listId: string) => {
+        setCurrentProject(prev => {
+            const newLists = (prev.taskLists || []).filter(l => l.id !== listId);
+            if (selectedItem?.id === listId) {
+                setSelectedItem(newLists[0] || null);
+            }
+            return { ...prev, taskLists: newLists };
         });
     };
 
@@ -798,6 +841,23 @@ Use the provided project context and chat history to give insightful and relevan
             </p>
         </ConfirmModal>
 
+        <ConfirmModal
+            isOpen={!!taskListToDelete}
+            onClose={() => setTaskListToDelete(null)}
+            onConfirm={() => {
+                if (taskListToDelete) {
+                    handleDeleteTaskList(taskListToDelete.id);
+                    setTaskListToDelete(null);
+                }
+            }}
+            title="Confirm List Deletion"
+            confirmButtonText="Delete List"
+        >
+            <p>
+                Are you sure you want to permanently delete the list <strong className="font-semibold text-white">"{taskListToDelete?.title || ''}"</strong>? This action cannot be undone.
+            </p>
+        </ConfirmModal>
+
         <LeftSidebar 
             project={currentProject}
             activeTab={activeTab}
@@ -819,6 +879,8 @@ Use the provided project context and chat history to give insightful and relevan
             }}
             onAddNote={handleAddNote}
             onDeleteNoteRequest={(note) => setNoteToDelete(note)}
+            onAddTaskList={handleAddTaskList}
+            onDeleteTaskListRequest={(list) => setTaskListToDelete(list)}
             saveStatus={saveStatus}
             isCollapsed={isSidebarCollapsed}
             onToggleCollapse={toggleSidebar}
@@ -832,6 +894,8 @@ Use the provided project context and chat history to give insightful and relevan
             onDeleteCharacterRequest={(character) => setCharacterToDelete(character)}
             onUpdateNote={handleUpdateNote}
             onDeleteNoteRequest={(note) => setNoteToDelete(note)}
+            onUpdateTaskList={handleUpdateTaskList}
+            onDeleteTaskListRequest={(list) => setTaskListToDelete(list)}
             onToggleCharacterAssociation={(sectionId, characterId) => {
                 setCurrentProject(prevProject => ({
                     ...prevProject,

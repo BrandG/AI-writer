@@ -14,6 +14,19 @@ export const PROJECTS_DATA: Project[] = [
         content: `- What if the "Helios Incident" wasn't sabotage but a natural temporal paradox Kaelen stumbled upon? Could make his obsession more tragic.\n- Rostova's backstory: Maybe the civilian casualties were on a colony world where her own family lived. This would give her a much stronger personal motivation to question the Concordance.\n- Possible names for the alien race that created the weapon: The Chronovores? The Weavers? The Architects?\n- The anomaly shouldn't just be a "hole in time." It should actively rewrite events, causing confusion and memory lapses for the characters. Imagine Kaelen and Rostova remembering different versions of the same event.`
       }
     ],
+    taskLists: [
+      {
+        id: 'list-1-1',
+        type: 'taskList',
+        title: 'Drafting Goals',
+        tasks: [
+          { id: 't-1', text: 'Outline Chapter 1-3', isCompleted: true },
+          { id: 't-2', text: 'Flesh out Kaelen\'s backstory', isCompleted: true },
+          { id: 't-3', text: 'Write the inciting incident scene', isCompleted: false },
+          { id: 't-4', text: 'Design the alien technology rules', isCompleted: false },
+        ]
+      }
+    ],
     characters: [
       {
         id: 'char-1-1',
@@ -144,6 +157,7 @@ export const PROJECTS_DATA: Project[] = [
         content: `- Elias to Lyra: "Everyone in this city has a price, Lyra. The trick is knowing the currency. Yours is secrets. His is power. Mine... mine is just getting through the day without another ghost whispering in my ear."\n- Captain Isolde to Elias: "I don't approve of your methods, Thorne. But I can't deny your results. Just... try not to burn the city down while you're at it."`
       }
     ],
+    taskLists: [],
     characters: [
       {
         id: 'char-2-1',

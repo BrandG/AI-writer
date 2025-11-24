@@ -64,6 +64,7 @@ const App: React.FC = () => {
         outline: outline,
         characters: characters,
         notes: notes,
+        taskLists: [],
       };
 
       const savedProject = await createProjectApi(newProject);

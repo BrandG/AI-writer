@@ -200,6 +200,14 @@ function formatProjectContext(project: Project, selectedItem: SelectableItem | n
     project.notes.forEach(note => {
         context += `- ${note.title} (ID: ${note.id})\n`;
     });
+
+    if (project.taskLists && project.taskLists.length > 0) {
+        context += `\nTASK LISTS (with IDs for targeting):\n`;
+        project.taskLists.forEach(list => {
+            context += `- ${list.title} (ID: ${list.id}): ${list.tasks.map(t => `${t.text} [${t.isCompleted ? 'x' : ' '}]`).join(', ')}\n`;
+        });
+    }
+
     context += '\n\n';
 
     if (selectedItem) {
@@ -212,6 +220,8 @@ function formatProjectContext(project: Project, selectedItem: SelectableItem | n
             context += `Outline Section: ${selectedItem.title} (ID: ${selectedItem.id})\nContent: ${selectedItem.content}\n`;
         } else if (selectedItem.type === 'note') {
             context += `Note: ${selectedItem.title} (ID: ${selectedItem.id})\nContent: ${selectedItem.content}\n`;
+        } else if (selectedItem.type === 'taskList') {
+             context += `Task List: ${selectedItem.title} (ID: ${selectedItem.id})\nTasks: ${JSON.stringify(selectedItem.tasks)}\n`;
         }
     }
     return context;

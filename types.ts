@@ -72,6 +72,19 @@ export interface Note {
   type: 'note';
 }
 
+export interface Task {
+  id: string;
+  text: string;
+  isCompleted: boolean;
+}
+
+export interface TaskList {
+  id: string;
+  title: string;
+  tasks: Task[];
+  type: 'taskList';
+}
+
 export interface Project {
   id: string;
   title: string;
@@ -80,6 +93,7 @@ export interface Project {
   outline: OutlineSection[];
   characters: Character[];
   notes: Note[];
+  taskLists: TaskList[];
 }
 
 export interface ChatMessage {
@@ -87,7 +101,7 @@ export interface ChatMessage {
     text: string;
 }
 
-export type SelectableItem = Character | OutlineSection | Note;
+export type SelectableItem = Character | OutlineSection | Note | TaskList;
 
 export type AiProvider = 'openai' | 'gemini';
 export type AiPersonality = 'assistant' | 'muse' | 'editor' | 'peer' | 'oracle';
