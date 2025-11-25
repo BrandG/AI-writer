@@ -1,3 +1,4 @@
+
 import React, { useState, useRef } from 'react';
 import { Project, AiProvider } from '../types';
 import ConfirmModal from './ConfirmModal';
@@ -26,8 +27,20 @@ const EditIcon: React.FC<{ className?: string }> = ({ className }) => (
     </svg>
 );
 
+const ArrowDownTrayIcon: React.FC<{ className?: string }> = ({ className }) => (
+    <svg xmlns="http://www.w3.org/2000/svg" className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor">
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+    </svg>
+);
 
-const ProjectCard: React.FC<{ project: Project; onSelect: () => void; onDelete?: () => void; onUpdateTitle?: (newTitle: string) => void; }> = ({ project, onSelect, onDelete, onUpdateTitle }) => {
+
+const ProjectCard: React.FC<{ 
+    project: Project; 
+    onSelect: () => void; 
+    onDelete?: () => void; 
+    onUpdateTitle?: (newTitle: string) => void;
+    onExport: () => void;
+}> = ({ project, onSelect, onDelete, onUpdateTitle, onExport }) => {
     const [isEditing, setIsEditing] = useState(false);
     const [currentTitle, setCurrentTitle] = useState(project.title);
 
@@ -94,15 +107,26 @@ const ProjectCard: React.FC<{ project: Project; onSelect: () => void; onDelete?:
                 >
                 Open Project
                 </button>
-                {onDelete && (
+                <div className="flex items-center gap-1">
                     <button
-                    onClick={(e) => { e.stopPropagation(); onDelete(); }}
-                    aria-label={`Delete project ${project.title}`}
-                    className="p-2 text-gray-400 hover:text-red-500 transition-colors duration-200 rounded-full hover:bg-gray-700"
+                        onClick={(e) => { e.stopPropagation(); onExport(); }}
+                        aria-label={`Export project ${project.title}`}
+                        title="Export Project"
+                        className="p-2 text-gray-400 hover:text-cyan-400 transition-colors duration-200 rounded-full hover:bg-gray-700"
                     >
-                        <TrashIcon className="h-5 w-5" />
+                        <ArrowDownTrayIcon className="h-5 w-5" />
                     </button>
-                )}
+                    {onDelete && (
+                        <button
+                        onClick={(e) => { e.stopPropagation(); onDelete(); }}
+                        aria-label={`Delete project ${project.title}`}
+                        className="p-2 text-gray-400 hover:text-red-500 transition-colors duration-200 rounded-full hover:bg-gray-700"
+                        title="Delete Project"
+                        >
+                            <TrashIcon className="h-5 w-5" />
+                        </button>
+                    )}
+                </div>
             </div>
         </div>
     );
@@ -244,7 +268,27 @@ const ProjectSelectionPage: React.FC<ProjectSelectionPageProps> = ({ savedProjec
     const url = URL.createObjectURL(dataBlob);
     const link = document.createElement('a');
     const timestamp = new Date().toISOString().replace(/:/g, '-').slice(0, 19);
-    link.download = `storyloom-backup-${timestamp}.json`;
+    link.download = `StoryLoom-All-${timestamp}.json`;
+    link.href = url;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+  };
+
+  const handleExportProject = (project: Project) => {
+    // Wrap in array to match the import format expectation
+    const dataStr = JSON.stringify([project], null, 2);
+    const dataBlob = new Blob([dataStr], { type: "application/json" });
+    const url = URL.createObjectURL(dataBlob);
+    const link = document.createElement('a');
+    
+    // Create a safe filename
+    // Replace characters that are generally unsafe in filenames with underscores, trim, and replace spaces with underscores
+    const safeTitle = project.title.replace(/[^a-z0-9\-_ ]/gi, '').trim().replace(/\s+/g, '_');
+    const timestamp = new Date().toISOString().replace(/:/g, '-').slice(0, 19);
+    
+    link.download = `${safeTitle}-StoryLoom-${timestamp}.json`;
     link.href = url;
     document.body.appendChild(link);
     link.click();
@@ -380,6 +424,7 @@ const ProjectSelectionPage: React.FC<ProjectSelectionPageProps> = ({ savedProjec
                 onSelect={() => onSelectProject(project)} 
                 onDelete={() => setProjectToDelete(project)}
                 onUpdateTitle={(newTitle) => onUpdateProjectTitle(project.id, newTitle)}
+                onExport={() => handleExportProject(project)}
               />
             ))}
           </div>
