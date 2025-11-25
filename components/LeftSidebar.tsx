@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect } from 'react';
-import { Project, SelectableItem, OutlineSection, Note, TaskList } from '../types';
+import { Project, SelectableItem, OutlineSection, Note, TaskList, Character } from '../types';
 import { SaveStatus, ActiveTab } from './WritingWorkspace';
 import StatusIndicator from './StatusIndicator';
 import Dropdown from './Dropdown';
@@ -32,6 +32,8 @@ interface LeftSidebarProps {
   canUndo: boolean;
   canRedo: boolean;
   onTriggerAdvisor: (advisorName: string) => void;
+  width: number;
+  isResizing: boolean;
 }
 
 const ADVISORS = [
@@ -405,7 +407,8 @@ const LeftSidebar: React.FC<LeftSidebarProps> = ({
     onDeleteOutlineSection, onReorderOutline, onAddNote, onDeleteNoteRequest, 
     onAddTaskList, onDeleteTaskListRequest,
     saveStatus, isCollapsed, onToggleCollapse,
-    onUndo, onRedo, canUndo, canRedo, onTriggerAdvisor
+    onUndo, onRedo, canUndo, canRedo, onTriggerAdvisor,
+    width, isResizing
 }) => {
   const [draggedItemId, setDraggedItemId] = useState<string | null>(null);
   const [dragOverInfo, setDragOverInfo] = useState<DragOverInfo | null>(null);
@@ -418,8 +421,21 @@ const LeftSidebar: React.FC<LeftSidebarProps> = ({
     { id: 'graph', label: 'Story Graph', icon: <ShareIcon className="h-6 w-6" /> },
   ];
 
+  // Group characters for sidebar display
+  const groupedCharacters: Record<string, Character[]> = {};
+  project.characters.forEach(char => {
+      const groupName = char.group || "Ungrouped";
+      if (!groupedCharacters[groupName]) {
+          groupedCharacters[groupName] = [];
+      }
+      groupedCharacters[groupName].push(char);
+  });
+
   return (
-    <aside className={`bg-gray-800 flex flex-col border-r border-gray-700 transition-all duration-300 ease-in-out relative ${isCollapsed ? 'w-20 p-2' : 'w-1/4 max-w-xs p-4'}`}>
+    <aside 
+        className={`bg-gray-800 flex flex-col overflow-hidden relative ${isResizing ? '' : 'transition-all duration-300 ease-in-out'}`}
+        style={{ width: isCollapsed ? '80px' : `${width}px`, padding: isCollapsed ? '0.5rem' : '1rem' }}
+    >
       <button
         onClick={onToggleCollapse}
         className={`absolute z-10 transition-all duration-300 ease-in-out focus:outline-none focus:ring-2 focus:ring-cyan-500 ${
@@ -552,19 +568,34 @@ const LeftSidebar: React.FC<LeftSidebarProps> = ({
             </>
         )}
         {activeTab === 'characters' && (
-             <ul>
-                {project.characters.map(item => (
-                    <li key={item.id}>
-                        <a
-                        href="#"
-                        onClick={(e) => { e.preventDefault(); onSelectItem(item); }}
-                        className={`block p-3 my-1 rounded-md text-sm transition-all duration-200 ${selectedItem?.id === item.id ? 'bg-cyan-600/20 text-cyan-300 font-semibold' : 'text-gray-300 hover:bg-gray-700 hover:text-white'}`}
-                        >
-                        {item.name}
-                        </a>
-                    </li>
-                ))}
-            </ul>
+             <div className="space-y-4">
+                 {Object.entries(groupedCharacters).length > 0 ? (
+                    Object.entries(groupedCharacters).map(([groupName, characters]) => (
+                        <div key={groupName}>
+                            {groupName !== "Ungrouped" && (
+                                <div className="px-2 py-1 text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1">
+                                    {groupName}
+                                </div>
+                            )}
+                            <ul>
+                                {characters.map(item => (
+                                    <li key={item.id}>
+                                        <a
+                                        href="#"
+                                        onClick={(e) => { e.preventDefault(); onSelectItem(item); }}
+                                        className={`block p-3 my-1 rounded-md text-sm transition-all duration-200 ${selectedItem?.id === item.id ? 'bg-cyan-600/20 text-cyan-300 font-semibold' : 'text-gray-300 hover:bg-gray-700 hover:text-white'}`}
+                                        >
+                                        {item.name}
+                                        </a>
+                                    </li>
+                                ))}
+                            </ul>
+                        </div>
+                    ))
+                 ) : (
+                    <div className="text-gray-500 text-sm text-center italic py-4">No characters yet.</div>
+                 )}
+            </div>
         )}
         {activeTab === 'notes' && (
             <>

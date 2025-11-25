@@ -1,3 +1,4 @@
+
 import React, { useState, useRef, useEffect, useLayoutEffect } from 'react';
 import { ChatMessage, Project, AiPersonality } from '../types';
 
@@ -10,6 +11,8 @@ interface ChatSidebarProps {
   onToggleCollapse: () => void;
   aiPersonality: AiPersonality;
   onAiPersonalityChange: (personality: AiPersonality) => void;
+  width: number;
+  isResizing: boolean;
 }
 
 const SendIcon: React.FC<{className?: string}> = ({ className }) => (
@@ -37,7 +40,10 @@ const ChevronDownIcon: React.FC<{className?: string}> = ({ className }) => (
 );
 
 
-const ChatSidebar: React.FC<ChatSidebarProps> = ({ project, messages, isLoading, onSendMessage, isCollapsed, onToggleCollapse, aiPersonality, onAiPersonalityChange }) => {
+const ChatSidebar: React.FC<ChatSidebarProps> = ({ 
+  project, messages, isLoading, onSendMessage, isCollapsed, onToggleCollapse, 
+  aiPersonality, onAiPersonalityChange, width, isResizing 
+}) => {
   const [userInput, setUserInput] = useState('');
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -76,7 +82,10 @@ const ChatSidebar: React.FC<ChatSidebarProps> = ({ project, messages, isLoading,
   }, [userInput, isCollapsed]);
 
   return (
-    <aside className={`bg-gray-800 flex flex-col border-l border-gray-700 transition-all duration-300 ease-in-out relative ${isCollapsed ? 'w-0 p-0 border-none' : 'w-1/3 max-w-md p-4'}`}>
+    <aside 
+      className={`bg-gray-800 flex flex-col overflow-hidden relative ${isResizing ? '' : 'transition-all duration-300 ease-in-out'}`}
+      style={{ width: isCollapsed ? '0px' : `${width}px`, padding: isCollapsed ? '0px' : '1rem' }}
+    >
        <button
         onClick={onToggleCollapse}
         className={`absolute z-10 transition-all duration-300 ease-in-out focus:outline-none focus:ring-2 focus:ring-cyan-500 ${
@@ -92,7 +101,7 @@ const ChatSidebar: React.FC<ChatSidebarProps> = ({ project, messages, isLoading,
       {!isCollapsed && (
         <>
             <div className="flex justify-between items-center mb-4 border-b border-gray-700 pb-2 pl-8 pr-2">
-                <h2 className="text-xl font-bold">AI Assistant</h2>
+                <h2 className="text-xl font-bold truncate">AI Assistant</h2>
                 <div className="relative">
                     <select
                         id="ai-personality"

@@ -78,6 +78,7 @@ const tools: OpenAI.Chat.Completions.ChatCompletionTool[] = [
                 properties: {
                     name: { type: 'string', description: 'The name of the new character.' },
                     description: { type: 'string', description: 'A detailed description of the character.' },
+                    group: { type: 'string', description: 'The group or category this character belongs to (e.g., Protagonist, Antagonist, Supporting).' },
                     originStory: { type: 'string', description: "The character's origin story and key formative events. Be creative." },
                     familyMentors: { type: 'string', description: "The character's family, mentors, enemies, and lovers. Be creative." },
                     secretsRegrets: { type: 'string', description: "The character's secrets, regrets, and turning points. Be creative." },
@@ -146,6 +147,7 @@ const tools: OpenAI.Chat.Completions.ChatCompletionTool[] = [
                     characterId: { type: 'string', description: 'The ID of the character to update.' },
                     newName: { type: 'string', description: 'The new name for the character.' },
                     newDescription: { type: 'string', description: 'The new description for the character.' },
+                    newGroup: { type: 'string', description: 'The new group or category for the character.' },
                     newOriginStory: { type: 'string', description: "The character's new origin story." },
                     newFamilyMentors: { type: 'string', description: "The character's new family/mentors." },
                     newSecretsRegrets: { type: 'string', description: "The character's new secrets/regrets." },
@@ -192,7 +194,7 @@ function formatProjectContext(project: Project, selectedItem: SelectableItem | n
 
     context += `CHARACTERS (with IDs for targeting):\n`;
     project.characters.forEach(char => {
-        context += `- ${char.name} (ID: ${char.id}): ${char.description}\n`;
+        context += `- ${char.name} (ID: ${char.id}) [Group: ${char.group || 'Ungrouped'}]: ${char.description}\n`;
     });
     context += `\nOUTLINE (with IDs for targeting):\n`;
     context += formatOutlineWithIds(project.outline);
@@ -525,7 +527,7 @@ Format/Genre: ${genre}
 Elevator Pitch: ${description}
 
 Please generate the initial characters, outline, and notes for this project in the required JSON format.
-For each character, please fill out all of the following fields, being as creative and detailed as possible: name, description, originStory, familyMentors, secretsRegrets, relationshipsTimeline, aliases, age, gender, species, occupation, affiliations, heightBuild, faceHairEyes, styleOutfit, vocalTraits, healthAbilities, coreMotivation, longTermGoal, fearFlaw, moralAlignment, temperament, emotionalTriggers, storyRole, introductionPoint, arcSummary, conflictContribution, changeMetric, dictionSlangTone, gesturesHabits, signaturePhrases, internalThoughtStyle, homeEnvironmentInfluence, culturalReligiousBackground, economicPoliticalStatus, technologyMagicInteraction, tiesToWorldEvents, firstLastAppearance, actorVisualReference, symbolicObjectsThemes, evolutionNotes, crossLinks, innerMonologueExample, playlistSoundPalette, colorPaletteMotifs, aiGameReference, developmentNotes.
+For each character, please fill out all of the following fields, being as creative and detailed as possible: name, description, group, originStory, familyMentors, secretsRegrets, relationshipsTimeline, aliases, age, gender, species, occupation, affiliations, heightBuild, faceHairEyes, styleOutfit, vocalTraits, healthAbilities, coreMotivation, longTermGoal, fearFlaw, moralAlignment, temperament, emotionalTriggers, storyRole, introductionPoint, arcSummary, conflictContribution, changeMetric, dictionSlangTone, gesturesHabits, signaturePhrases, internalThoughtStyle, homeEnvironmentInfluence, culturalReligiousBackground, economicPoliticalStatus, technologyMagicInteraction, tiesToWorldEvents, firstLastAppearance, actorVisualReference, symbolicObjectsThemes, evolutionNotes, crossLinks, innerMonologueExample, playlistSoundPalette, colorPaletteMotifs, aiGameReference, developmentNotes.
 `;
 
     try {

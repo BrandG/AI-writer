@@ -252,8 +252,20 @@ const CharacterView: React.FC<{
                 defaultValue={item.name}
                 onBlur={(e) => e.target.value.trim() && onUpdateCharacter(item.id, { name: e.target.value.trim() })}
                 aria-label="Character name"
-                className="w-full text-4xl font-bold text-cyan-300 mb-6 bg-transparent rounded-md p-2 -m-2 focus:outline-none focus:bg-gray-800 focus:ring-2 focus:ring-cyan-500"
+                placeholder="Character Name"
+                className="w-full text-4xl font-bold text-cyan-300 mb-2 bg-transparent rounded-md p-2 -m-2 focus:outline-none focus:bg-gray-800 focus:ring-2 focus:ring-cyan-500"
             />
+            
+            <div className="mb-6 flex items-center">
+                <span className="text-sm font-semibold text-gray-400 mr-2 uppercase tracking-wide">Group:</span>
+                <input
+                    key={`${item.id}-group`}
+                    defaultValue={item.group || ''}
+                    onBlur={(e) => onUpdateCharacter(item.id, { group: e.target.value.trim() })}
+                    placeholder="e.g. Protagonists, Villains"
+                    className="bg-transparent border-b border-gray-600 text-gray-300 text-sm focus:outline-none focus:border-cyan-500 transition-colors px-1 py-0.5 w-64"
+                />
+            </div>
             
             <div className="bg-gray-800/50 rounded-lg border border-gray-700 p-4 mb-6">
                  <div className="flex items-center mb-2">
@@ -417,6 +429,16 @@ const OutlineView: React.FC<{
     closeDropdown();
   };
 
+  // Group characters by their assigned group property
+  const groupedCharacters: Record<string, Character[]> = {};
+  project.characters.forEach(char => {
+      const groupName = char.group || "Ungrouped";
+      if (!groupedCharacters[groupName]) {
+          groupedCharacters[groupName] = [];
+      }
+      groupedCharacters[groupName].push(char);
+  });
+
   return (
     <>
       <h1 className="text-4xl font-bold text-cyan-300 mb-8">{item.title}</h1>
@@ -524,25 +546,42 @@ const OutlineView: React.FC<{
       </CollapsibleSection>
 
       <CollapsibleSection title="Associated Characters" defaultOpen={false}>
-          <div className="flex flex-wrap gap-3">
-            {project.characters.map(character => {
-                const isAssociated = item.characterIds?.includes(character.id);
-                return (
-                <button
-                    key={character.id}
-                    onClick={() => onToggleCharacterAssociation(item.id, character.id)}
-                    aria-pressed={isAssociated}
-                    className={`px-4 py-2 rounded-full text-sm font-semibold transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-gray-900 focus:ring-cyan-400 ${
-                    isAssociated
-                        ? 'bg-cyan-600 text-white shadow-md'
-                        : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
-                    }`}
-                >
-                    {character.name}
-                </button>
-                );
-            })}
+          {Object.entries(groupedCharacters).length > 0 ? (
+            <div className="space-y-4">
+                {Object.entries(groupedCharacters).map(([groupName, characters]) => (
+                    <div key={groupName} className="border border-gray-700 rounded-md overflow-hidden">
+                         {/* Native details/summary for simple sub-sections */}
+                         <details open={groupName !== "Ungrouped"} className="group">
+                            <summary className="bg-gray-800 px-4 py-2 cursor-pointer font-semibold text-gray-300 hover:text-white hover:bg-gray-700 select-none flex justify-between items-center">
+                                <span>{groupName}</span>
+                                <ChevronDownIcon className="h-4 w-4 transition-transform group-open:rotate-180" />
+                            </summary>
+                            <div className="p-3 bg-gray-900/50 flex flex-wrap gap-2">
+                                {characters.map(character => {
+                                    const isAssociated = item.characterIds?.includes(character.id);
+                                    return (
+                                        <button
+                                            key={character.id}
+                                            onClick={() => onToggleCharacterAssociation(item.id, character.id)}
+                                            aria-pressed={isAssociated}
+                                            className={`px-3 py-1.5 rounded-full text-xs font-semibold transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-gray-900 focus:ring-cyan-400 ${
+                                            isAssociated
+                                                ? 'bg-cyan-600 text-white shadow-md'
+                                                : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
+                                            }`}
+                                        >
+                                            {character.name}
+                                        </button>
+                                    );
+                                })}
+                            </div>
+                         </details>
+                    </div>
+                ))}
             </div>
+          ) : (
+            <p className="text-gray-500 italic">No characters created yet.</p>
+          )}
       </CollapsibleSection>
     </>
   );

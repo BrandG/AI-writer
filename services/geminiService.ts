@@ -87,7 +87,7 @@ function formatProjectContext(project: Project, selectedItem: SelectableItem | n
 
     context += `CHARACTERS (with IDs for targeting):\n`;
     project.characters.forEach(char => {
-        context += `- ${char.name} (ID: ${char.id}): ${char.description}\n`;
+        context += `- ${char.name} (ID: ${char.id}) [Group: ${char.group || 'Ungrouped'}]: ${char.description}\n`;
     });
     context += `\nOUTLINE (with IDs for targeting):\n`;
     context += formatOutlineWithIds(project.outline);
@@ -185,6 +185,7 @@ const getToolsAsFunctionDeclarations = (): FunctionDeclaration[] => {
                 properties: {
                     name: { type: Type.STRING },
                     description: { type: Type.STRING },
+                    group: { type: Type.STRING, description: 'The group or category this character belongs to (e.g., Protagonist, Antagonist, Supporting).' },
                     originStory: { type: Type.STRING },
                     familyMentors: { type: Type.STRING },
                     secretsRegrets: { type: Type.STRING },
@@ -251,6 +252,7 @@ const getToolsAsFunctionDeclarations = (): FunctionDeclaration[] => {
                     characterId: { type: Type.STRING, description: 'The ID of the character to update.' },
                     newName: { type: Type.STRING, description: 'The new name for the character.' },
                     newDescription: { type: Type.STRING, description: 'The new description for the character.' },
+                    newGroup: { type: Type.STRING, description: 'The new group or category for the character.' },
                     newOriginStory: { type: Type.STRING, description: "The character's new origin story." },
                     newFamilyMentors: { type: Type.STRING, description: "The character's new family, mentors, or enemies." },
                     newSecretsRegrets: { type: Type.STRING, description: "The character's new secrets or regrets." },
@@ -620,6 +622,7 @@ The notes section should contain a few notes, each with a title and content, for
     const characterProperties = {
         name: { type: Type.STRING },
         description: { type: Type.STRING },
+        group: { type: Type.STRING, description: 'The group or category this character belongs to (e.g., Protagonist, Antagonist).' },
         originStory: { type: Type.STRING },
         familyMentors: { type: Type.STRING },
         secretsRegrets: { type: Type.STRING },

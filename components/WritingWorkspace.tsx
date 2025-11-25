@@ -116,6 +116,8 @@ export type SaveStatus = 'unsaved' | 'saving' | 'saved' | 'error';
 export type ActiveTab = 'outline' | 'characters' | 'notes' | 'tasks' | 'graph';
 
 const MAX_HISTORY = 50;
+const MIN_SIDEBAR_WIDTH = 250;
+const MAX_SIDEBAR_WIDTH = 800;
 
 const WritingWorkspace: React.FC<WritingWorkspaceProps> = ({ project, onBack, onUpdateProject, aiService }) => {
   const [history, setHistory] = useState<{
@@ -147,6 +149,12 @@ const WritingWorkspace: React.FC<WritingWorkspaceProps> = ({ project, onBack, on
     () => (localStorage.getItem('aiPersonality') as AiPersonality) || 'assistant'
   );
 
+  // Resize state
+  const [leftSidebarWidth, setLeftSidebarWidth] = useState(300);
+  const [chatSidebarWidth, setChatSidebarWidth] = useState(350);
+  const [isResizingLeft, setIsResizingLeft] = useState(false);
+  const [isResizingChat, setIsResizingChat] = useState(false);
+
   // Track the current project ID to differentiate between a project switch and a data update.
   const [currentProjectId, setCurrentProjectId] = useState<string>(project.id);
 
@@ -158,6 +166,39 @@ const WritingWorkspace: React.FC<WritingWorkspaceProps> = ({ project, onBack, on
     localStorage.setItem('aiPersonality', aiPersonality);
   }, [aiPersonality]);
 
+    // Resize Handlers
+    useEffect(() => {
+        const handleMouseMove = (e: MouseEvent) => {
+            if (isResizingLeft) {
+                const newWidth = Math.min(Math.max(e.clientX, MIN_SIDEBAR_WIDTH), MAX_SIDEBAR_WIDTH);
+                setLeftSidebarWidth(newWidth);
+            } else if (isResizingChat) {
+                const newWidth = Math.min(Math.max(window.innerWidth - e.clientX, MIN_SIDEBAR_WIDTH), MAX_SIDEBAR_WIDTH);
+                setChatSidebarWidth(newWidth);
+            }
+        };
+
+        const handleMouseUp = () => {
+            setIsResizingLeft(false);
+            setIsResizingChat(false);
+            document.body.style.cursor = 'default';
+            document.body.style.userSelect = 'auto';
+        };
+
+        if (isResizingLeft || isResizingChat) {
+            document.addEventListener('mousemove', handleMouseMove);
+            document.addEventListener('mouseup', handleMouseUp);
+            document.body.style.cursor = 'col-resize';
+            document.body.style.userSelect = 'none';
+        }
+
+        return () => {
+            document.removeEventListener('mousemove', handleMouseMove);
+            document.removeEventListener('mouseup', handleMouseUp);
+            document.body.style.cursor = 'default';
+            document.body.style.userSelect = 'auto';
+        };
+    }, [isResizingLeft, isResizingChat]);
 
     // Undo/Redo logic
     const undo = useCallback(() => {
@@ -924,7 +965,7 @@ Use the provided project context and chat history to give insightful and relevan
     };
 
   return (
-    <div className="flex h-screen w-full">
+    <div className="flex h-screen w-full overflow-hidden">
         <ConfirmModal
             isOpen={!!characterToDelete}
             onClose={() => setCharacterToDelete(null)}
@@ -1007,7 +1048,17 @@ Use the provided project context and chat history to give insightful and relevan
             canUndo={history.past.length > 0}
             canRedo={history.future.length > 0}
             onTriggerAdvisor={handleTriggerAdvisor}
+            width={leftSidebarWidth}
+            isResizing={isResizingLeft}
         />
+
+        {!isSidebarCollapsed && (
+            <div
+                className={`w-1 cursor-col-resize hover:bg-cyan-500 transition-colors z-20 flex-shrink-0 ${isResizingLeft ? 'bg-cyan-500' : 'bg-gray-900 border-r border-gray-700'}`}
+                onMouseDown={(e) => { e.preventDefault(); setIsResizingLeft(true); }}
+            />
+        )}
+
         <MainContent 
             item={selectedItem}
             project={currentProject}
@@ -1037,6 +1088,14 @@ Use the provided project context and chat history to give insightful and relevan
             onNodeClick={handleSelectItem}
             aiService={aiService}
         />
+
+        {!isChatSidebarCollapsed && (
+            <div
+                className={`w-1 cursor-col-resize hover:bg-cyan-500 transition-colors z-20 flex-shrink-0 ${isResizingChat ? 'bg-cyan-500' : 'bg-gray-900 border-l border-gray-700'}`}
+                onMouseDown={(e) => { e.preventDefault(); setIsResizingChat(true); }}
+            />
+        )}
+
         <ChatSidebar 
             project={currentProject}
             messages={messages}
@@ -1046,6 +1105,8 @@ Use the provided project context and chat history to give insightful and relevan
             onToggleCollapse={toggleChatSidebar}
             aiPersonality={aiPersonality}
             onAiPersonalityChange={setAiPersonality}
+            width={chatSidebarWidth}
+            isResizing={isResizingChat}
         />
     </div>
   );

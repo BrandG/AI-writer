@@ -6,6 +6,7 @@ export interface Character {
   name: string;
   description: string;
   type: 'character';
+  group?: string; // New field for grouping characters
   imageUrl?: string;
   aliases?: string;
   age?: string;
