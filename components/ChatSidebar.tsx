@@ -6,7 +6,7 @@ interface ChatSidebarProps {
   project: Project;
   messages: ChatMessage[];
   isLoading: boolean;
-  onSendMessage: (userInput: string) => void;
+  onSendMessage: (userInput: string, isCouncilMode: boolean) => void;
   isCollapsed: boolean;
   onToggleCollapse: () => void;
   aiPersonality: AiPersonality;
@@ -39,12 +39,19 @@ const ChevronDownIcon: React.FC<{className?: string}> = ({ className }) => (
     </svg>
 );
 
+const ScaleIcon: React.FC<{className?: string}> = ({ className }) => (
+  <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className={className}>
+    <path strokeLinecap="round" strokeLinejoin="round" d="M12 3v17.25m0 0c-1.472 0-2.882.265-4.185.75M12 20.25c1.472 0 2.882.265 4.185.75M18.75 4.97A48.416 48.416 0 0 0 12 4.5c-2.291 0-4.545.16-6.75.47m13.5 0c1.01.143 2.01.317 3 .52m-3-.52 2.62 10.726c.122.499-.106 1.028-.589 1.202a5.988 5.988 0 0 1-2.031.352 5.988 5.988 0 0 1-2.031-.352c-.483-.174-.711-.703-.59-1.202L18.75 4.971Zm-16.5.52c.99-.203 1.99-.377 3-.52m0 0 2.62 10.726c.122.499-.106 1.028-.589 1.202a5.989 5.989 0 0 1-2.031.352 5.989 5.989 0 0 1-2.031-.352c-.483-.174-.711-.703-.59-1.202L5.25 4.971Z" />
+  </svg>
+);
+
 
 const ChatSidebar: React.FC<ChatSidebarProps> = ({ 
   project, messages, isLoading, onSendMessage, isCollapsed, onToggleCollapse, 
   aiPersonality, onAiPersonalityChange, width, isResizing 
 }) => {
   const [userInput, setUserInput] = useState('');
+  const [isCouncilMode, setIsCouncilMode] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
@@ -56,7 +63,7 @@ const ChatSidebar: React.FC<ChatSidebarProps> = ({
 
   const submitForm = () => {
     if (!userInput.trim() || isLoading) return;
-    onSendMessage(userInput);
+    onSendMessage(userInput, isCouncilMode);
     setUserInput('');
   };
 
@@ -100,14 +107,25 @@ const ChatSidebar: React.FC<ChatSidebarProps> = ({
 
       {!isCollapsed && (
         <>
-            <div className="flex justify-between items-center mb-4 border-b border-gray-700 pb-2 pl-8 pr-2">
-                <h2 className="text-xl font-bold truncate">AI Assistant</h2>
+            <div className="flex flex-col mb-4 border-b border-gray-700 pb-2 pl-8 pr-2">
+                <div className="flex justify-between items-center mb-2">
+                    <h2 className="text-xl font-bold truncate">AI Assistant</h2>
+                    <button
+                        onClick={() => setIsCouncilMode(!isCouncilMode)}
+                        className={`p-1.5 rounded-md transition-all duration-200 border ${isCouncilMode ? 'bg-purple-900/50 border-purple-500 text-purple-300 shadow-[0_0_10px_rgba(168,85,247,0.3)]' : 'bg-transparent border-gray-700 text-gray-400 hover:bg-gray-700'}`}
+                        title={isCouncilMode ? "Council Mode Active" : "Enable Council Mode"}
+                    >
+                        <ScaleIcon className="h-5 w-5" />
+                    </button>
+                </div>
+                
                 <div className="relative">
                     <select
                         id="ai-personality"
                         value={aiPersonality}
                         onChange={(e) => onAiPersonalityChange(e.target.value as AiPersonality)}
-                        className="bg-gray-700 text-xs text-gray-300 rounded-md py-1 pl-2 pr-6 border-0 focus:ring-2 focus:ring-cyan-500 focus:outline-none appearance-none"
+                        disabled={isCouncilMode} // Disable personality when council is active
+                        className={`w-full text-xs rounded-md py-1 pl-2 pr-6 border-0 focus:ring-2 focus:ring-cyan-500 focus:outline-none appearance-none transition-colors ${isCouncilMode ? 'bg-gray-800 text-gray-500 cursor-not-allowed' : 'bg-gray-700 text-gray-300'}`}
                         title="Change AI Personality"
                     >
                         <option value="assistant">Helpful Assistant</option>
@@ -118,6 +136,12 @@ const ChatSidebar: React.FC<ChatSidebarProps> = ({
                     </select>
                     <ChevronDownIcon className="h-4 w-4 text-gray-400 absolute right-1 top-1/2 -translate-y-1/2 pointer-events-none" />
                 </div>
+                {isCouncilMode && (
+                    <div className="text-[10px] text-purple-400 mt-1 flex items-center gap-1 font-semibold tracking-wide">
+                        <span className="w-1.5 h-1.5 rounded-full bg-purple-500 animate-pulse"></span>
+                        THE COUNCIL IS CONVENED
+                    </div>
+                )}
             </div>
             <div className="flex-grow overflow-y-auto mb-4 pr-2">
                 <div className="space-y-4">
@@ -142,14 +166,18 @@ const ChatSidebar: React.FC<ChatSidebarProps> = ({
                 <div ref={messagesEndRef} />
                 </div>
             </div>
-            <form onSubmit={handleSubmit} className="flex mt-auto">
+            <form onSubmit={handleSubmit} className="flex mt-auto relative">
                 <textarea
                 ref={textareaRef}
                 value={userInput}
                 onChange={(e) => setUserInput(e.target.value)}
                 onKeyDown={handleKeyDown}
-                placeholder="Ask about your project..."
-                className="flex-grow bg-gray-700 text-white rounded-l-md p-3 border-0 focus:ring-2 focus:ring-cyan-500 focus:outline-none resize-none"
+                placeholder={isCouncilMode ? "Ask the Council..." : "Ask about your project..."}
+                className={`flex-grow text-white rounded-l-md p-3 border-2 focus:outline-none resize-none transition-all duration-300 ${
+                    isCouncilMode 
+                    ? 'bg-gray-800 border-purple-600 focus:ring-0 placeholder-purple-400/50' 
+                    : 'bg-gray-700 border-transparent focus:ring-2 focus:ring-cyan-500'
+                }`}
                 disabled={isLoading}
                 rows={1}
                 style={{ maxHeight: '150px' }}
@@ -157,7 +185,11 @@ const ChatSidebar: React.FC<ChatSidebarProps> = ({
                 <button
                 type="submit"
                 disabled={isLoading || !userInput.trim()}
-                className="bg-cyan-600 text-white p-3 rounded-r-md hover:bg-cyan-500 disabled:bg-gray-600 disabled:cursor-not-allowed transition-colors duration-200"
+                className={`p-3 rounded-r-md text-white transition-colors duration-200 disabled:bg-gray-600 disabled:cursor-not-allowed ${
+                    isCouncilMode 
+                    ? 'bg-purple-600 hover:bg-purple-500' 
+                    : 'bg-cyan-600 hover:bg-cyan-500'
+                }`}
                 aria-label="Send message to AI assistant"
                 >
                 <SendIcon className="h-6 w-6" />

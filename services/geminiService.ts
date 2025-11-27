@@ -1,4 +1,3 @@
-
 import { GoogleGenAI, Type, FunctionDeclaration, GenerateContentResponse } from "@google/genai";
 import { Project, SelectableItem, OutlineSection, Character, UnifiedAIResponse, AiService, Note } from '../types';
 import { v4 as uuidv4 } from 'uuid';
@@ -62,7 +61,27 @@ const convertToGeminiHistory = (history: OpenAI.Chat.Completions.ChatCompletionM
             }
         }
     }
-    return geminiHistory;
+    
+    // Gemini Rule: History must start with a User message.
+    // If the first message is Model (e.g. initial greeting), remove it.
+    if (geminiHistory.length > 0 && geminiHistory[0].role === 'model') {
+        geminiHistory.shift();
+    }
+
+    // Gemini Rule: Consecutive messages from the same role are not allowed.
+    // Merge consecutive messages.
+    const mergedHistory: any[] = [];
+    for (const msg of geminiHistory) {
+        if (mergedHistory.length > 0 && mergedHistory[mergedHistory.length - 1].role === msg.role) {
+            const prevMsg = mergedHistory[mergedHistory.length - 1];
+            // Merge parts
+            prevMsg.parts = [...prevMsg.parts, ...msg.parts];
+        } else {
+            mergedHistory.push(msg);
+        }
+    }
+
+    return mergedHistory;
 };
 
 
@@ -329,20 +348,25 @@ const getAIResponse = async (
 
     const projectContext = formatProjectContext(project, selectedItem);
     const geminiHistory = convertToGeminiHistory(conversationHistory);
+    
+    // Debug Logging
+    const payload = {
+        model: 'gemini-2.5-flash',
+        contents: geminiHistory,
+        config: {
+            systemInstruction: `${systemInstruction}\n\n${projectContext}`,
+            tools: [{ functionDeclarations: getToolsAsFunctionDeclarations() }],
+        }
+    };
+    console.log("Gemini Request Payload (getAIResponse):", JSON.stringify(payload, null, 2));
+
 
     try {
         // Use gemini-2.5-flash for the main chat interface. 
         // It provides the most stable experience for Function Calling (Tools) and avoids the 
         // "Function call is missing a thought signature" error that can occur with gemini-3-pro-preview
         // when mixing tool use with experimental thinking features.
-        const response: GenerateContentResponse = await ai.models.generateContent({
-            model: 'gemini-2.5-flash',
-            contents: geminiHistory,
-            config: {
-                systemInstruction: `${systemInstruction}\n\n${projectContext}`,
-                tools: [{ functionDeclarations: getToolsAsFunctionDeclarations() }],
-            }
-        });
+        const response: GenerateContentResponse = await ai.models.generateContent(payload);
 
         const text = response.text;
         const functionCalls = response.functionCalls;
@@ -432,14 +456,14 @@ ${section.content}
 
 Now, perform the analysis based on the rules above. Re-read the scene multiple times if necessary to ensure no contradictions are missed.`;
 
+    const payload = {
+        model: 'gemini-3-pro-preview',
+        contents: prompt,
+    };
+    console.log("Gemini Request Payload (getConsistencyCheckResponse):", JSON.stringify(payload, null, 2));
+
     try {
-        const response = await ai.models.generateContent({
-            model: 'gemini-3-pro-preview',
-            contents: prompt,
-            config: {
-                thinkingConfig: { thinkingBudget: 4096 }, // Detailed analysis
-            }
-        });
+        const response = await ai.models.generateContent(payload);
         return response.text || "No response text.";
     } catch (error) {
         console.error("Error fetching from Gemini API for consistency check:", error);
@@ -462,11 +486,14 @@ const getReadingLevel = async (text: string): Promise<string> => {
     Text:
     "${text}"`;
 
+    const payload = {
+        model: 'gemini-2.5-flash',
+        contents: prompt,
+    };
+    console.log("Gemini Request Payload (getReadingLevel):", JSON.stringify(payload, null, 2));
+
     try {
-        const response = await ai.models.generateContent({
-            model: 'gemini-2.5-flash',
-            contents: prompt,
-        });
+        const response = await ai.models.generateContent(payload);
         return response.text || "No response text.";
     } catch (error) {
         console.error("Error fetching from Gemini API for reading level:", error);
@@ -493,11 +520,14 @@ const cleanUpText = async (text: string): Promise<string> => {
     Text to clean:
     "${text}"`;
 
+    const payload = {
+        model: 'gemini-2.5-flash',
+        contents: prompt,
+    };
+    console.log("Gemini Request Payload (cleanUpText):", JSON.stringify(payload, null, 2));
+
     try {
-        const response = await ai.models.generateContent({
-            model: 'gemini-2.5-flash',
-            contents: prompt,
-        });
+        const response = await ai.models.generateContent(payload);
         return response.text || text;
     } catch (error) {
         console.error("Error fetching from Gemini API for text cleanup:", error);
@@ -525,16 +555,19 @@ Outfit: ${character.styleOutfit}.
 ${character.actorVisualReference ? `Visual Reference: ${character.actorVisualReference}.` : ''}
 Focus on a clear, expressive facial portrait.`;
     
-    try {
-        const response = await ai.models.generateContent({
-            model: 'gemini-2.5-flash-image', // Nano Banana model
-            contents: { parts: [{ text: prompt }] },
-            config: {
-                imageConfig: {
-                    aspectRatio: '1:1',
-                },
+    const payload = {
+        model: 'gemini-2.5-flash-image', // Nano Banana model
+        contents: { parts: [{ text: prompt }] },
+        config: {
+            imageConfig: {
+                aspectRatio: '1:1',
             },
-        });
+        },
+    };
+    console.log("Gemini Request Payload (generateCharacterImage):", JSON.stringify(payload, null, 2));
+
+    try {
+        const response = await ai.models.generateContent(payload);
 
         // Check for safety blocking
         if (response.candidates?.[0]?.finishReason === 'SAFETY') {
@@ -566,16 +599,19 @@ Scene Title: "${section.title}".
 Scene Description: ${section.content}
 Style: Cinematic photography, 8k resolution, highly detailed, realistic lighting matching the ${genre} genre. No text or titles in the image.`;
 
-    try {
-        const response = await ai.models.generateContent({
-            model: 'gemini-2.5-flash-image', // Nano Banana model
-            contents: { parts: [{ text: prompt }] },
-            config: {
-                imageConfig: {
-                    aspectRatio: '16:9',
-                },
+    const payload = {
+        model: 'gemini-2.5-flash-image', // Nano Banana model
+        contents: { parts: [{ text: prompt }] },
+        config: {
+            imageConfig: {
+                aspectRatio: '16:9',
             },
-        });
+        },
+    };
+    console.log("Gemini Request Payload (generateIllustrationForSection):", JSON.stringify(payload, null, 2));
+
+    try {
+        const response = await ai.models.generateContent(payload);
 
          // Check for safety blocking
         if (response.candidates?.[0]?.finishReason === 'SAFETY') {
@@ -669,55 +705,58 @@ The notes section should contain a few notes, each with a title and content, for
         aiGameReference: { type: Type.STRING },
         developmentNotes: { type: Type.STRING },
     };
-
-    try {
-        const response = await ai.models.generateContent({
-            model: "gemini-3-pro-preview",
-            contents: prompt,
-            config: {
-                responseMimeType: "application/json",
-                responseSchema: {
-                    type: Type.OBJECT,
-                    properties: {
-                        characters: {
-                            type: Type.ARRAY,
-                            description: "A list of 2-3 key characters for the story.",
-                            items: {
-                                type: Type.OBJECT,
-                                properties: characterProperties,
-                                required: Object.keys(characterProperties)
-                            }
-                        },
-                        outline: {
-                            type: Type.ARRAY,
-                            description: "A list of top-level outline sections for the story (e.g., Act 1, Act 2, Act 3).",
-                            items: {
-                                type: Type.OBJECT,
-                                properties: {
-                                    title: { type: Type.STRING },
-                                    content: { type: Type.STRING }
-                                },
-                                required: ['title', 'content']
-                            }
-                        },
-                        notes: {
-                            type: Type.ARRAY,
-                            description: "A scratchpad for initial ideas, plot points, or research notes, organized into separate notes.",
-                            items: {
-                                type: Type.OBJECT,
-                                properties: {
-                                    title: { type: Type.STRING },
-                                    content: { type: Type.STRING }
-                                },
-                                required: ['title', 'content']
-                            }
+    
+    const payload = {
+        model: "gemini-3-pro-preview",
+        contents: prompt,
+        config: {
+            responseMimeType: "application/json",
+            responseSchema: {
+                type: Type.OBJECT,
+                properties: {
+                    characters: {
+                        type: Type.ARRAY,
+                        description: "A list of 2-3 key characters for the story.",
+                        items: {
+                            type: Type.OBJECT,
+                            properties: characterProperties,
+                            required: Object.keys(characterProperties)
                         }
                     },
-                    required: ['characters', 'outline', 'notes']
+                    outline: {
+                        type: Type.ARRAY,
+                        description: "A list of top-level outline sections for the story (e.g., Act 1, Act 2, Act 3).",
+                        items: {
+                            type: Type.OBJECT,
+                            properties: {
+                                title: { type: Type.STRING },
+                                content: { type: Type.STRING }
+                            },
+                            required: ['title', 'content']
+                        }
+                    },
+                    notes: {
+                        type: Type.ARRAY,
+                        description: "A scratchpad for initial ideas, plot points, or research notes, organized into separate notes.",
+                        items: {
+                            type: Type.OBJECT,
+                            properties: {
+                                title: { type: Type.STRING },
+                                content: { type: Type.STRING }
+                            },
+                            required: ['title', 'content']
+                        }
+                    }
                 },
-                // thinkingConfig removed to ensure reliable JSON generation
+                required: ['characters', 'outline', 'notes']
             },
-        });
+            // thinkingConfig removed to ensure reliable JSON generation
+        },
+    };
+    console.log("Gemini Request Payload (generateInitialProjectData):", JSON.stringify(payload, null, 2));
+
+    try {
+        const response = await ai.models.generateContent(payload);
         const jsonResponse = JSON.parse(response.text.trim());
 
         // Add IDs and types to the generated data
@@ -786,20 +825,110 @@ Provide a concise bulleted list of insights. Be specific.
 Data:
 ${graphDescription}`;
 
+    const payload = {
+        model: 'gemini-3-pro-preview',
+        contents: prompt,
+        // thinkingConfig removed to resolve invalid argument errors
+    };
+    console.log("Gemini Request Payload (getGraphAnalysis):", JSON.stringify(payload, null, 2));
+
     try {
-        const response = await ai.models.generateContent({
-            model: 'gemini-3-pro-preview',
-            contents: prompt,
-            config: {
-                 thinkingConfig: { thinkingBudget: 2048 },
-            }
-        });
+        const response = await ai.models.generateContent(payload);
         return response.text || "No analysis generated.";
     } catch (error) {
         console.error("Error fetching graph analysis:", error);
         return "Sorry, I couldn't analyze the graph structure at this time.";
     }
 };
+
+const runCouncil = async (
+    prompt: string,
+    project: Project,
+    selectedItem: SelectableItem | null
+): Promise<string> => {
+    if (!process.env.API_KEY) {
+        throw new Error("AI is disabled. Google API key is missing.");
+    }
+    const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+    const projectContext = formatProjectContext(project, selectedItem);
+
+    // 1. Define the personas
+    const councilMembers = [
+        {
+            name: "The Developmental Editor",
+            role: "Focus: The Big Picture. Ignore grammar. Look at structure, pacing, and motivation. Does this paragraph earn its keep? Is the tone consistent? Does the argument flow logically?",
+        },
+        {
+            name: "The Ghostwriter",
+            role: "Focus: Elevation. Your job is to 'plus' the text. Don't change the meaning, but make the prose sing. Suggest stronger verbs, more evocative metaphors, and punchier phrasing.",
+        },
+        {
+            name: "The Copy Editor",
+            role: "Focus: Ruthless Mechanics. You are a strict New York publishing editor. Hunt down passive voice, adverbs, repetitive sentence structures, and unnecessary words. Be harsh.",
+        },
+        {
+            name: "The Beta Reader",
+            role: "Focus: The Experience. You are a casual reader. Tell me where you got bored, where you got confused, or where the writing felt pretentious. Be honest about how it feels to read.",
+        }
+    ];
+
+    // 2. Launch parallel requests for each member
+    // Using gemini-2.5-flash for speed and efficiency for the individual members
+    const memberPromises = councilMembers.map(async (member) => {
+        const memberSystemInstruction = `${member.role}\n\n${projectContext}`;
+        
+        const payload = {
+            model: 'gemini-2.5-flash',
+            contents: prompt,
+            config: { systemInstruction: memberSystemInstruction }
+        };
+        console.log(`Gemini Request Payload (runCouncil - ${member.name}):`, JSON.stringify(payload, null, 2));
+
+        const response = await ai.models.generateContent(payload);
+        return { name: member.name, response: response.text || "(No comment)" };
+    });
+
+    try {
+        const memberResults = await Promise.all(memberPromises);
+
+        // 3. Synthesize the results
+        const synthesisPrompt = `
+You are the Chairperson of the Writer's Council.
+You have convened a meeting to discuss the user's query: "${prompt}"
+
+Here are the opinions of your council members:
+
+${memberResults.map(m => `**${m.name}**: ${m.response}`).join('\n\n')}
+
+**Your Task:**
+1. Present the individual opinions clearly (summarize them if they are too long, but keep the core points).
+2. Synthesize these diverse viewpoints into a final, balanced verdict or actionable advice for the writer.
+3. Identify key themes or disagreements (e.g. between style vs. clarity) and help the writer decide which path serves the story best.
+
+Format the output nicely with Markdown, using headings for each member and the final verdict.
+        `;
+
+        // Using gemini-3-pro-preview for the final synthesis to provide high-quality reasoning
+        const chairPayload = {
+            model: 'gemini-3-pro-preview',
+            contents: synthesisPrompt,
+            config: { 
+                systemInstruction: "You are the wise Chairperson of a Writer's Council.",
+                // thinkingConfig removed to resolve invalid argument errors
+            }
+        };
+        console.log("Gemini Request Payload (runCouncil - Chairperson):", JSON.stringify(chairPayload, null, 2));
+
+        const chairResponse = await ai.models.generateContent(chairPayload);
+
+        return chairResponse.text || "The Chairperson remained silent.";
+
+    } catch (error) {
+        console.error("Error running the Council:", error);
+        throw new Error("The Council could not convene due to a network error.");
+    }
+};
+
 
 // Ensure the service object matches the AiService interface
 export const geminiService: AiService = {
@@ -811,4 +940,5 @@ export const geminiService: AiService = {
     generateCharacterImage,
     generateIllustrationForSection,
     getGraphAnalysis,
+    runCouncil,
 };

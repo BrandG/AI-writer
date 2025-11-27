@@ -633,6 +633,85 @@ ${graphDescription}`;
     }
 };
 
+const runCouncil = async (
+    prompt: string,
+    project: Project,
+    selectedItem: SelectableItem | null
+): Promise<string> => {
+     if (!process.env.OPENAI_API_KEY) {
+        throw new Error("AI is disabled. OpenAI API key is missing.");
+    }
+    const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY, dangerouslyAllowBrowser: true });
+    const projectContext = formatProjectContext(project, selectedItem);
+
+    // 1. Define the personas
+    const councilMembers = [
+        {
+            name: "The Developmental Editor",
+            role: "Focus: The Big Picture. Ignore grammar. Look at structure, pacing, and motivation. Does this paragraph earn its keep? Is the tone consistent? Does the argument flow logically?",
+        },
+        {
+            name: "The Ghostwriter",
+            role: "Focus: Elevation. Your job is to 'plus' the text. Don't change the meaning, but make the prose sing. Suggest stronger verbs, more evocative metaphors, and punchier phrasing.",
+        },
+        {
+            name: "The Copy Editor",
+            role: "Focus: Ruthless Mechanics. You are a strict New York publishing editor. Hunt down passive voice, adverbs, repetitive sentence structures, and unnecessary words. Be harsh.",
+        },
+        {
+            name: "The Beta Reader",
+            role: "Focus: The Experience. You are a casual reader. Tell me where you got bored, where you got confused, or where the writing felt pretentious. Be honest about how it feels to read.",
+        }
+    ];
+
+    // 2. Launch parallel requests for each member
+    const memberPromises = councilMembers.map(async (member) => {
+        const memberSystemInstruction = `${member.role}\n\n${projectContext}`;
+        const response = await openai.chat.completions.create({
+            model: 'gpt-4o',
+            messages: [
+                { role: 'system', content: memberSystemInstruction },
+                { role: 'user', content: prompt }
+            ]
+        });
+        return { name: member.name, response: response.choices[0].message.content || "(No comment)" };
+    });
+
+    try {
+        const memberResults = await Promise.all(memberPromises);
+
+        // 3. Synthesize the results
+        const synthesisPrompt = `
+You are the Chairperson of the Writer's Council.
+You have convened a meeting to discuss the user's query: "${prompt}"
+
+Here are the opinions of your council members:
+
+${memberResults.map(m => `**${m.name}**: ${m.response}`).join('\n\n')}
+
+**Your Task:**
+1. Present the individual opinions clearly (summarize them if they are too long, but keep the core points).
+2. Synthesize these diverse viewpoints into a final, balanced verdict or actionable advice for the writer.
+3. Identify key themes or disagreements (e.g. between style vs. clarity) and help the writer decide which path serves the story best.
+
+Format the output nicely with Markdown, using headings for each member and the final verdict.
+        `;
+
+        const chairResponse = await openai.chat.completions.create({
+            model: 'gpt-4o',
+            messages: [
+                { role: 'system', content: "You are the wise Chairperson of a Writer's Council." },
+                { role: 'user', content: synthesisPrompt }
+            ]
+        });
+
+        return chairResponse.choices[0].message.content || "The Chairperson remained silent.";
+
+    } catch (error) {
+        console.error("Error running the Council:", error);
+        throw new Error("The Council could not convene due to a network error.");
+    }
+};
 
 export const openaiService: AiService = {
     generateInitialProjectData,
@@ -643,4 +722,5 @@ export const openaiService: AiService = {
     generateCharacterImage,
     generateIllustrationForSection,
     getGraphAnalysis,
+    runCouncil,
 };

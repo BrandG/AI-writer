@@ -133,4 +133,9 @@ export interface AiService {
     generateCharacterImage: (character: Character) => Promise<string>;
     generateIllustrationForSection: (section: OutlineSection, genre: string) => Promise<string>;
     getGraphAnalysis: (project: Project) => Promise<string>;
+    runCouncil: (
+        prompt: string,
+        project: Project,
+        selectedItem: SelectableItem | null
+    ) => Promise<string>;
 }

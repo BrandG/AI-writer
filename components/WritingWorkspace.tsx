@@ -855,11 +855,42 @@ You have been given a set of tools to modify the project's outline and character
 Use the provided project context and chat history to give insightful and relevant answers.`;
 
 
-    const handleSendMessage = async (userInput: string) => {
+    const handleSendMessage = async (userInput: string, isCouncilMode: boolean = false) => {
         setIsLoading(true);
         const userMessage: ChatMessage = { role: 'user', text: userInput };
         setMessages(prev => [...prev, userMessage]);
 
+        // If in Council Mode, route to the Council method
+        if (isCouncilMode) {
+            try {
+                // Add a placeholder message for the user's visual feedback
+                setMessages(prev => [...prev, { role: 'model', text: "The Council is deliberating..." }]);
+                
+                const councilResponse = await aiService.runCouncil(userInput, currentProject, selectedItem);
+                
+                // Replace the placeholder or add the new message
+                setMessages(prev => {
+                    const newMessages = [...prev];
+                    // Remove the "deliberating" message if we want to replace it, or just append. 
+                    // Let's replace the last message if it was the status update.
+                    if (newMessages[newMessages.length - 1].text === "The Council is deliberating...") {
+                         newMessages.pop();
+                    }
+                    return [...newMessages, { role: 'model', text: councilResponse }];
+                });
+                
+                // We don't necessarily update conversationHistory for standard chat when using council mode
+                // as it's a one-off deviation, but we could if we wanted continuity.
+            } catch (error) {
+                const errorMessage = error instanceof Error ? error.message : "An unknown error occurred.";
+                setMessages(prev => [...prev, { role: 'model', text: `Error: ${errorMessage}` }]);
+            } finally {
+                setIsLoading(false);
+            }
+            return;
+        }
+
+        // Standard Chat Logic
         let currentHistory: any[] = [...conversationHistory, { role: 'user', content: userInput }];
         setConversationHistory(currentHistory);
         
