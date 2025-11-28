@@ -588,7 +588,7 @@ const OutlineView: React.FC<{
             onBlur={() => onUpdateOutlineContent(item.id, content)}
             placeholder="Start writing the content for this section..."
             aria-label="Outline section content"
-            className="w-full min-h-[20rem] bg-gray-800 border border-gray-700 rounded-md p-4 text-gray-300 leading-relaxed focus:outline-none focus:ring-2 focus:ring-cyan-500 transition-shadow resize-y"
+            className="w-full min-h-[40rem] bg-gray-800 border border-gray-700 rounded-md p-4 text-gray-300 leading-relaxed focus:outline-none focus:ring-2 focus:ring-cyan-500 transition-shadow resize-y"
         />
         <div className="mt-2 flex justify-between items-center">
             <div className="relative inline-block text-left">
