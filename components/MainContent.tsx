@@ -512,12 +512,43 @@ const OutlineView: React.FC<{
 }> = ({ item, project, onUpdateOutlineContent, onToggleCharacterAssociation, onConsistencyCheck, onReadingLevelCheck, onCleanUpText, onGenerateIllustration, onDeleteIllustration, isGeneratingIllustration }) => {
   const [content, setContent] = useState(item.content);
   const wordCount = (content || '').trim().split(/\s+/).filter(Boolean).length;
+  
+  // Ref to track last saved content to prevent redundant saves
+  const lastSavedContent = useRef(item.content);
+  // Ref for debounce timer
+  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
       // Sync local state when the selected item changes
       setContent(item.content);
+      lastSavedContent.current = item.content;
+      // Clear any pending debounce from previous item
+      if (debounceRef.current) clearTimeout(debounceRef.current);
   }, [item.id, item.content]);
   
+  const handleContentChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
+      const newContent = e.target.value;
+      setContent(newContent);
+      
+      if (debounceRef.current) clearTimeout(debounceRef.current);
+      
+      // Debounce save for granular undo: 1 second of inactivity
+      debounceRef.current = setTimeout(() => {
+          if (newContent !== lastSavedContent.current) {
+              onUpdateOutlineContent(item.id, newContent);
+              lastSavedContent.current = newContent;
+          }
+      }, 1000);
+  };
+  
+  const handleBlur = () => {
+      if (debounceRef.current) clearTimeout(debounceRef.current);
+      if (content !== lastSavedContent.current) {
+          onUpdateOutlineContent(item.id, content);
+          lastSavedContent.current = content;
+      }
+  };
+
   const handleToolClick = (toolAction: () => void, closeDropdown: () => void) => {
     toolAction();
     closeDropdown();
@@ -584,8 +615,8 @@ const OutlineView: React.FC<{
         <textarea
             key={item.id} // Re-mount to reflect state changes if another item is selected
             value={content}
-            onChange={e => setContent(e.target.value)}
-            onBlur={() => onUpdateOutlineContent(item.id, content)}
+            onChange={handleContentChange}
+            onBlur={handleBlur}
             placeholder="Start writing the content for this section..."
             aria-label="Outline section content"
             className="w-full min-h-[40rem] bg-gray-800 border border-gray-700 rounded-md p-4 text-gray-300 leading-relaxed focus:outline-none focus:ring-2 focus:ring-cyan-500 transition-shadow resize-y"
@@ -688,11 +719,38 @@ const NoteView: React.FC<{
 }> = ({ item, onUpdateNote, onDeleteNoteRequest }) => {
   const [content, setContent] = useState(item.content);
   const wordCount = (content || '').trim().split(/\s+/).filter(Boolean).length;
+  
+  const lastSavedContent = useRef(item.content);
+  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
-    // Sync local state when the project changes
     setContent(item.content);
+    lastSavedContent.current = item.content;
+    if (debounceRef.current) clearTimeout(debounceRef.current);
   }, [item.id, item.content]);
+
+  const handleContentChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
+      const newContent = e.target.value;
+      setContent(newContent);
+      
+      if (debounceRef.current) clearTimeout(debounceRef.current);
+      
+      // Debounce save for granular undo
+      debounceRef.current = setTimeout(() => {
+          if (newContent !== lastSavedContent.current) {
+               onUpdateNote(item.id, { content: newContent });
+               lastSavedContent.current = newContent;
+          }
+      }, 1000);
+  };
+  
+  const handleBlur = () => {
+      if (debounceRef.current) clearTimeout(debounceRef.current);
+      if (content !== lastSavedContent.current) {
+           onUpdateNote(item.id, { content });
+           lastSavedContent.current = content;
+      }
+  };
   
   return (
     <>
@@ -710,8 +768,8 @@ const NoteView: React.FC<{
         <textarea
             key={item.id}
             value={content}
-            onChange={(e) => setContent(e.target.value)}
-            onBlur={() => onUpdateNote(item.id, { content })}
+            onChange={handleContentChange}
+            onBlur={handleBlur}
             placeholder="Jot down your ideas here..."
             aria-label="Project notes"
             className="w-full min-h-[70vh] bg-gray-800 border border-gray-700 rounded-md p-6 text-gray-300 leading-relaxed focus:outline-none focus:ring-2 focus:ring-cyan-500 transition-shadow resize-y"
@@ -927,3 +985,4 @@ const MainContent: React.FC<MainContentProps> = ({ item, project, activeTab, onU
 };
 
 export default MainContent;
+    

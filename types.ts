@@ -119,6 +119,13 @@ export interface UnifiedAIResponse {
     }[];
 }
 
+export interface PendingToolCall {
+    id: string;
+    functionName: string;
+    arguments: any;
+    rawArguments: string;
+}
+
 export interface AiService {
     generateInitialProjectData: (title: string, genre: string, description: string) => Promise<{ outline: OutlineSection[], characters: Character[], notes: Note[] }>;
     getAIResponse: (

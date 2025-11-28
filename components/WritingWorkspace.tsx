@@ -1,6 +1,6 @@
 
 import React, { useState, useCallback, useEffect, useRef } from 'react';
-import { Project, SelectableItem, OutlineSection, Character, ChatMessage, AiService, Note, AiPersonality, TaskList, Task } from '../types';
+import { Project, SelectableItem, OutlineSection, Character, ChatMessage, AiService, Note, AiPersonality, TaskList, Task, PendingToolCall } from '../types';
 import LeftSidebar from './LeftSidebar';
 import MainContent from './MainContent';
 import ChatSidebar from './ChatSidebar';
@@ -115,7 +115,7 @@ interface WritingWorkspaceProps {
 export type SaveStatus = 'unsaved' | 'saving' | 'saved' | 'error';
 export type ActiveTab = 'outline' | 'characters' | 'notes' | 'tasks' | 'graph';
 
-const MAX_HISTORY = 50;
+const MAX_HISTORY = 200; // Increased to handle granular undo steps
 const MIN_SIDEBAR_WIDTH = 250;
 const MAX_SIDEBAR_WIDTH = 800;
 
@@ -148,6 +148,9 @@ const WritingWorkspace: React.FC<WritingWorkspaceProps> = ({ project, onBack, on
   const [aiPersonality, setAiPersonality] = useState<AiPersonality>(
     () => (localStorage.getItem('aiPersonality') as AiPersonality) || 'assistant'
   );
+  
+  // Pending tools state
+  const [pendingToolCalls, setPendingToolCalls] = useState<PendingToolCall[]>([]);
 
   // Resize state
   const [leftSidebarWidth, setLeftSidebarWidth] = useState(300);
@@ -923,7 +926,7 @@ You have been given a set of tools to modify the project's outline and character
 
 **CRITICAL INSTRUCTIONS:**
 1. When a user's request involves creating, adding, updating, modifying, deleting, moving, or reordering project data (characters or outline sections), you should prioritize using a tool.
-2. If the user's intent is clear, execute the function call directly. Do not ask for confirmation.
+2. If the user's intent is clear, generate the appropriate function call to perform the action.
 3. For general conversation, brainstorming, or questions that do not involve direct modification of the project data, you should respond with a helpful text answer.
 
 Use the provided project context and chat history to give insightful and relevant answers.`;
@@ -976,17 +979,20 @@ Use the provided project context and chat history to give insightful and relevan
             const toolCalls = response.toolCalls;
 
             if (toolCalls && toolCalls.length > 0) {
-                 const toolFunctions: { [key: string]: (args: any) => any } = {
-                    addOutlineSection: handleAddOutlineSection,
-                    updateOutlineSection: handleUpdateOutlineSection,
-                    deleteOutlineSection: handleDeleteOutlineSection,
-                    moveOutlineSection: handleMoveOutlineSection,
-                    addCharacter: handleAddCharacter,
-                    updateCharacter: handleAiUpdateCharacter, // Use the wrapper
-                    deleteCharacter: handleDeleteCharacter,
-                };
+                // INTERCEPT: Do not execute tools immediately.
+                // Store them in pendingToolCalls state for user confirmation.
                 
-                // Add assistant message with tool calls to history
+                const pending: PendingToolCall[] = toolCalls.map(tc => ({
+                    id: tc.id,
+                    functionName: tc.function.name,
+                    arguments: JSON.parse(tc.function.arguments),
+                    rawArguments: tc.function.arguments
+                }));
+                
+                setPendingToolCalls(pending);
+                
+                // Add the Assistant message with tool calls to history, so that when we confirm,
+                // we can just append the tool result.
                 const assistantToolCallMessage = {
                     role: 'assistant' as const,
                     tool_calls: toolCalls.map(tc => ({
@@ -995,47 +1001,8 @@ Use the provided project context and chat history to give insightful and relevan
                         function: { name: tc.function.name, arguments: tc.function.arguments },
                     })),
                 };
-                currentHistory.push(assistantToolCallMessage);
+                setConversationHistory(prev => [...prev, assistantToolCallMessage]);
                 
-                // Execute tools and collect their results
-                const toolResultMessages = toolCalls.map(toolCall => {
-                    const functionName = toolCall.function.name;
-                    const functionArgs = JSON.parse(toolCall.function.arguments);
-                    let result = { success: false, message: `Unknown function call: ${functionName}` };
-                    
-                    if (toolFunctions[functionName]) {
-                        try {
-                           result = toolFunctions[functionName](functionArgs);
-                        } catch (e) {
-                            console.error(`Error executing tool ${functionName}:`, e);
-                            result = { success: false, message: `Error executing tool: ${e instanceof Error ? e.message : String(e)}` };
-                        }
-                    }
-
-                    return {
-                        role: 'tool' as const,
-                        tool_call_id: toolCall.id,
-                        content: JSON.stringify(result),
-                    };
-                });
-                
-                // Add tool results to history and call the AI again
-                currentHistory.push(...toolResultMessages);
-                setConversationHistory(currentHistory);
-
-                const finalResponse = await aiService.getAIResponse(currentHistory, currentProject, selectedItem, systemInstruction);
-
-                if (finalResponse.text) {
-                    const modelMessage: ChatMessage = { role: 'model', text: finalResponse.text };
-                    setMessages(prev => [...prev, modelMessage]);
-                    setConversationHistory(prev => [...prev, { role: 'assistant', content: finalResponse.text }]);
-                } else {
-                    const modelMessage: ChatMessage = { role: 'model', text: "(Actions performed successfully.)" };
-                    setMessages(prev => [...prev, modelMessage]);
-                    setConversationHistory(prev => [...prev, { role: 'assistant', content: null }]);
-                }
-
-
             } else if (response.text) {
                 const modelMessage: ChatMessage = { role: 'model', text: response.text };
                 setMessages(prev => [...prev, modelMessage]);
@@ -1051,6 +1018,88 @@ Use the provided project context and chat history to give insightful and relevan
         } finally {
             setIsLoading(false);
         }
+    };
+
+    const handleConfirmTool = async (toolCall: PendingToolCall) => {
+        setIsLoading(true);
+        // Remove from pending
+        setPendingToolCalls(prev => prev.filter(tc => tc.id !== toolCall.id));
+
+        const toolFunctions: { [key: string]: (args: any) => any } = {
+            addOutlineSection: handleAddOutlineSection,
+            updateOutlineSection: handleUpdateOutlineSection,
+            deleteOutlineSection: handleDeleteOutlineSection,
+            moveOutlineSection: handleMoveOutlineSection,
+            addCharacter: handleAddCharacter,
+            updateCharacter: handleAiUpdateCharacter, // Use the wrapper
+            deleteCharacter: handleDeleteCharacter,
+        };
+
+        const functionName = toolCall.functionName;
+        const functionArgs = toolCall.arguments;
+        let result = { success: false, message: `Unknown function call: ${functionName}` };
+
+        if (toolFunctions[functionName]) {
+            try {
+               result = toolFunctions[functionName](functionArgs);
+            } catch (e) {
+                console.error(`Error executing tool ${functionName}:`, e);
+                result = { success: false, message: `Error executing tool: ${e instanceof Error ? e.message : String(e)}` };
+            }
+        }
+
+        // Add tool result to history
+        const toolResultMessage = {
+            role: 'tool' as const,
+            tool_call_id: toolCall.id,
+            content: JSON.stringify(result),
+        };
+        
+        const updatedHistory = [...conversationHistory, toolResultMessage];
+        setConversationHistory(updatedHistory);
+        
+        // Call AI again for follow-up
+        try {
+             const systemInstruction = `${personalityPrompts[aiPersonality]}\n\n${toolInstructions}`;
+             const finalResponse = await aiService.getAIResponse(updatedHistory, currentProject, selectedItem, systemInstruction);
+
+            if (finalResponse.text) {
+                const modelMessage: ChatMessage = { role: 'model', text: finalResponse.text };
+                setMessages(prev => [...prev, modelMessage]);
+                setConversationHistory(prev => [...prev, { role: 'assistant', content: finalResponse.text }]);
+            } else {
+                const modelMessage: ChatMessage = { role: 'model', text: "(Action confirmed and executed.)" };
+                setMessages(prev => [...prev, modelMessage]);
+                setConversationHistory(prev => [...prev, { role: 'assistant', content: null }]);
+            }
+
+        } catch (error) {
+             const errorMessage = error instanceof Error ? error.message : "An unknown error occurred.";
+            const modelMessage: ChatMessage = { role: 'model', text: `Action executed, but error getting follow-up: ${errorMessage}` };
+            setMessages(prev => [...prev, modelMessage]);
+        } finally {
+            setIsLoading(false);
+        }
+    };
+
+    const handleCancelTool = (toolCall: PendingToolCall) => {
+        setPendingToolCalls(prev => prev.filter(tc => tc.id !== toolCall.id));
+        
+        // Add a "cancelled" system message so the AI knows not to try again immediately or knows why it failed
+        // Note: 'tool' role requires a tool_call_id, but if we cancel, we are essentially saying the tool failed or was rejected.
+        // A clean way is to send a tool result saying "User cancelled this action."
+        
+        const toolResultMessage = {
+            role: 'tool' as const,
+            tool_call_id: toolCall.id,
+            content: JSON.stringify({ success: false, message: "User cancelled the action." }),
+        };
+        
+        const updatedHistory = [...conversationHistory, toolResultMessage];
+        setConversationHistory(updatedHistory);
+        
+        // Optionally, we could call the AI again to let it apologize, but simply showing a system message is often enough
+        setMessages(prev => [...prev, { role: 'model', text: "(Action cancelled by user.)" }]);
     };
 
     const handleTriggerAdvisor = (advisorName: string) => {
@@ -1216,6 +1265,9 @@ Use the provided project context and chat history to give insightful and relevan
             width={chatSidebarWidth}
             isResizing={isResizingChat}
             onSaveChatToNote={() => handleSaveChatToNote(messages)}
+            pendingToolCalls={pendingToolCalls}
+            onConfirmAction={handleConfirmTool}
+            onCancelAction={handleCancelTool}
         />
     </div>
   );

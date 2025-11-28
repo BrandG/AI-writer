@@ -1,6 +1,6 @@
 
 import React, { useState, useRef, useEffect, useLayoutEffect } from 'react';
-import { ChatMessage, Project, AiPersonality } from '../types';
+import { ChatMessage, Project, AiPersonality, PendingToolCall } from '../types';
 import Dropdown from './Dropdown';
 
 interface ChatSidebarProps {
@@ -15,6 +15,9 @@ interface ChatSidebarProps {
   width: number;
   isResizing: boolean;
   onSaveChatToNote: () => void;
+  pendingToolCalls?: PendingToolCall[];
+  onConfirmAction?: (toolCall: PendingToolCall) => void;
+  onCancelAction?: (toolCall: PendingToolCall) => void;
 }
 
 const SendIcon: React.FC<{className?: string}> = ({ className }) => (
@@ -71,9 +74,28 @@ const DocumentPlusIcon: React.FC<{className?: string}> = ({ className }) => (
     </svg>
 );
 
+const ExclamationTriangleIcon: React.FC<{className?: string}> = ({ className }) => (
+    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className={className}>
+      <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126ZM12 15.75h.007v.008H12v-.008Z" />
+    </svg>
+);
+
+const CheckIcon: React.FC<{className?: string}> = ({ className }) => (
+    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className={className}>
+      <path strokeLinecap="round" strokeLinejoin="round" d="m4.5 12.75 6 6 9-13.5" />
+    </svg>
+);
+
+const XMarkIcon: React.FC<{className?: string}> = ({ className }) => (
+    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className={className}>
+      <path strokeLinecap="round" strokeLinejoin="round" d="M6 18 18 6M6 6l12 12" />
+    </svg>
+);
+
 const ChatSidebar: React.FC<ChatSidebarProps> = ({ 
   project, messages, isLoading, onSendMessage, isCollapsed, onToggleCollapse, 
-  aiPersonality, onAiPersonalityChange, width, isResizing, onSaveChatToNote 
+  aiPersonality, onAiPersonalityChange, width, isResizing, onSaveChatToNote,
+  pendingToolCalls = [], onConfirmAction, onCancelAction
 }) => {
   const [userInput, setUserInput] = useState('');
   const [isCouncilMode, setIsCouncilMode] = useState(false);
@@ -84,7 +106,7 @@ const ChatSidebar: React.FC<ChatSidebarProps> = ({
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   };
 
-  useEffect(scrollToBottom, [messages]);
+  useEffect(scrollToBottom, [messages, pendingToolCalls]);
 
   const submitForm = () => {
     if (!userInput.trim() || isLoading) return;
@@ -125,6 +147,22 @@ const ChatSidebar: React.FC<ChatSidebarProps> = ({
       textarea.style.height = `${textarea.scrollHeight}px`; // Set to new scroll height
     }
   }, [userInput, isCollapsed]);
+
+  const hasPendingAction = pendingToolCalls.length > 0;
+
+  // Formatting helper for pending action display
+  const formatActionName = (name: string) => {
+    return name.replace(/([A-Z])/g, ' $1').replace(/^./, str => str.toUpperCase());
+  };
+
+  const formatActionDetails = (args: any) => {
+      // Simplified display for common arguments
+      const { title, name, newTitle, newName } = args;
+      const primaryName = title || name || newTitle || newName;
+      
+      if (primaryName) return `"${primaryName}"`;
+      return "details...";
+  };
 
   return (
     <aside 
@@ -226,6 +264,43 @@ const ChatSidebar: React.FC<ChatSidebarProps> = ({
                     </div>
                     </div>
                 ))}
+                
+                {/* Pending Actions UI */}
+                {hasPendingAction && pendingToolCalls.map(toolCall => (
+                    <div key={toolCall.id} className="flex justify-start w-full">
+                         <div className="w-full max-w-sm bg-gray-800 border-l-4 border-yellow-500 rounded-r-lg p-4 shadow-lg">
+                            <div className="flex items-start gap-3 mb-3">
+                                <ExclamationTriangleIcon className="h-6 w-6 text-yellow-500 flex-shrink-0" />
+                                <div>
+                                    <h3 className="font-bold text-gray-200 text-sm">Proposed Change</h3>
+                                    <p className="text-xs text-gray-400 mt-1">
+                                        The AI wants to perform: <br/>
+                                        <span className="text-cyan-400 font-mono">{formatActionName(toolCall.functionName)}</span>
+                                        <br/>
+                                        <span className="text-gray-300 italic">{formatActionDetails(toolCall.arguments)}</span>
+                                    </p>
+                                </div>
+                            </div>
+                            <div className="flex gap-2">
+                                <button
+                                    onClick={() => onConfirmAction?.(toolCall)}
+                                    className="flex-1 bg-green-600 hover:bg-green-500 text-white py-1.5 px-3 rounded text-xs font-semibold flex items-center justify-center gap-1 transition-colors"
+                                >
+                                    <CheckIcon className="h-4 w-4" />
+                                    Confirm
+                                </button>
+                                <button
+                                    onClick={() => onCancelAction?.(toolCall)}
+                                    className="flex-1 bg-gray-700 hover:bg-gray-600 text-gray-300 py-1.5 px-3 rounded text-xs font-semibold flex items-center justify-center gap-1 transition-colors"
+                                >
+                                    <XMarkIcon className="h-4 w-4" />
+                                    Reject
+                                </button>
+                            </div>
+                         </div>
+                    </div>
+                ))}
+
                 {isLoading && (
                     <div className="flex justify-start">
                     <div className="max-w-xs p-3 rounded-lg bg-gray-700 text-gray-200">
@@ -246,19 +321,19 @@ const ChatSidebar: React.FC<ChatSidebarProps> = ({
                 value={userInput}
                 onChange={(e) => setUserInput(e.target.value)}
                 onKeyDown={handleKeyDown}
-                placeholder={isCouncilMode ? "Ask the Council..." : "Ask about your project..."}
+                placeholder={isCouncilMode ? "Ask the Council..." : hasPendingAction ? "Confirm action first..." : "Ask about your project..."}
                 className={`flex-grow text-white rounded-l-md p-3 border-2 focus:outline-none resize-none transition-all duration-300 ${
                     isCouncilMode 
                     ? 'bg-gray-800 border-purple-600 focus:ring-0 placeholder-purple-400/50' 
                     : 'bg-gray-700 border-transparent focus:ring-2 focus:ring-cyan-500'
                 }`}
-                disabled={isLoading}
+                disabled={isLoading || hasPendingAction}
                 rows={1}
                 style={{ maxHeight: '150px' }}
                 />
                 <button
                 type="submit"
-                disabled={isLoading || !userInput.trim()}
+                disabled={isLoading || !userInput.trim() || hasPendingAction}
                 className={`p-3 rounded-r-md text-white transition-colors duration-200 disabled:bg-gray-600 disabled:cursor-not-allowed ${
                     isCouncilMode 
                     ? 'bg-purple-600 hover:bg-purple-500' 
