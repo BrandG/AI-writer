@@ -672,6 +672,25 @@ const WritingWorkspace: React.FC<WritingWorkspaceProps> = ({ project, onBack, on
         setActiveTab('notes');
     };
 
+    const handleExportProject = () => {
+        // Wrap in array to match the import format expectation
+        const dataStr = JSON.stringify([currentProject], null, 2);
+        const dataBlob = new Blob([dataStr], { type: "application/json" });
+        const url = URL.createObjectURL(dataBlob);
+        const link = document.createElement('a');
+
+        // Create a safe filename
+        const safeTitle = currentProject.title.replace(/[^a-z0-9\-_ ]/gi, '').trim().replace(/\s+/g, '_');
+        const timestamp = new Date().toISOString().replace(/:/g, '-').slice(0, 19);
+
+        link.download = `${safeTitle}-StoryLoom-${timestamp}.json`;
+        link.href = url;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        URL.revokeObjectURL(url);
+    };
+
     // AI Tool Handlers
     const handleConsistencyCheck = async (section: OutlineSection) => {
         setIsLoading(true);
@@ -1106,6 +1125,7 @@ Use the provided project context and chat history to give insightful and relevan
             onTriggerAdvisor={handleTriggerAdvisor}
             width={leftSidebarWidth}
             isResizing={isResizingLeft}
+            onExport={handleExportProject}
         />
 
         {!isSidebarCollapsed && (

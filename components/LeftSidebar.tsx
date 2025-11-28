@@ -34,6 +34,7 @@ interface LeftSidebarProps {
   onTriggerAdvisor: (advisorName: string) => void;
   width: number;
   isResizing: boolean;
+  onExport: () => void;
 }
 
 const ADVISORS = [
@@ -129,6 +130,12 @@ const ShareIcon: React.FC<{className?: string}> = ({ className }) => (
   <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className={className}>
     <path strokeLinecap="round" strokeLinejoin="round" d="M7.5 14.25v2.25m3-4.5v4.5m3-6.75v6.75m3-9v9M6 20.25h12A2.25 2.25 0 0 0 20.25 18V6A2.25 2.25 0 0 0 18 3.75H6A2.25 2.25 0 0 0 3.75 6v12A2.25 2.25 0 0 0 6 20.25Z" />
   </svg>
+);
+
+const ArrowDownTrayIcon: React.FC<{ className?: string }> = ({ className }) => (
+    <svg xmlns="http://www.w3.org/2000/svg" className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor">
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+    </svg>
 );
 
 interface DragOverInfo {
@@ -408,7 +415,7 @@ const LeftSidebar: React.FC<LeftSidebarProps> = ({
     onAddTaskList, onDeleteTaskListRequest,
     saveStatus, isCollapsed, onToggleCollapse,
     onUndo, onRedo, canUndo, canRedo, onTriggerAdvisor,
-    width, isResizing
+    width, isResizing, onExport
 }) => {
   const [draggedItemId, setDraggedItemId] = useState<string | null>(null);
   const [dragOverInfo, setDragOverInfo] = useState<DragOverInfo | null>(null);
@@ -511,6 +518,16 @@ const LeftSidebar: React.FC<LeftSidebarProps> = ({
                         </div>
                     )}
                 </Dropdown>
+
+                <div className="w-px h-4 bg-gray-700 mx-1"></div>
+
+                <button
+                    onClick={onExport}
+                    className="p-1 text-gray-400 hover:text-white hover:bg-gray-700 rounded transition-colors"
+                    title="Archive Project (Export)"
+                >
+                    <ArrowDownTrayIcon className="h-5 w-5" />
+                </button>
 
                 <div className="flex-grow"></div>
                 <StatusIndicator status={saveStatus} />
