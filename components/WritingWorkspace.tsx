@@ -647,6 +647,31 @@ const WritingWorkspace: React.FC<WritingWorkspaceProps> = ({ project, onBack, on
         });
     };
 
+    // Chat to Note Handler
+    const handleSaveChatToNote = (chatMessages: ChatMessage[]) => {
+        if (chatMessages.length === 0) return;
+
+        const formattedChat = chatMessages.map(m => {
+            const role = m.role === 'user' ? 'User' : 'AI';
+            return `**${role}:** ${m.text}`;
+        }).join('\n\n');
+
+        const newNote: Note = {
+            id: uuidv4(),
+            type: 'note',
+            title: `Chat Session - ${new Date().toLocaleString()}`,
+            content: formattedChat,
+        };
+
+        updateProjectState(prev => ({
+            ...prev,
+            notes: [...prev.notes, newNote],
+        }));
+
+        setSelectedItem(newNote);
+        setActiveTab('notes');
+    };
+
     // AI Tool Handlers
     const handleConsistencyCheck = async (section: OutlineSection) => {
         setIsLoading(true);
@@ -1138,6 +1163,7 @@ Use the provided project context and chat history to give insightful and relevan
             onAiPersonalityChange={setAiPersonality}
             width={chatSidebarWidth}
             isResizing={isResizingChat}
+            onSaveChatToNote={() => handleSaveChatToNote(messages)}
         />
     </div>
   );
