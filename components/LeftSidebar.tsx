@@ -1,5 +1,5 @@
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { Project, SelectableItem, OutlineSection, Note, TaskList, Character } from '../types';
 import { SaveStatus, ActiveTab } from './WritingWorkspace';
 import StatusIndicator from './StatusIndicator';
@@ -437,6 +437,21 @@ const LeftSidebar: React.FC<LeftSidebarProps> = ({
       }
       groupedCharacters[groupName].push(char);
   });
+  
+  // Calculate total word count
+  const calculateWordCount = (sections: OutlineSection[]): number => {
+    let count = 0;
+    for (const section of sections) {
+        count += (section.content || '').trim().split(/\s+/).filter(Boolean).length;
+        if (section.children) {
+            count += calculateWordCount(section.children);
+        }
+    }
+    return count;
+  };
+
+  const totalWordCount = useMemo(() => calculateWordCount(project.outline), [project.outline]);
+
 
   return (
     <aside 
@@ -552,15 +567,19 @@ const LeftSidebar: React.FC<LeftSidebarProps> = ({
       <div className={`flex-grow overflow-y-auto pr-2 ${isCollapsed ? 'hidden' : ''}`}>
         {activeTab === 'outline' && (
              <>
-                <div className="px-1 mb-2">
+                <div className="px-1 mb-4">
                     <button
                         onClick={onAddRootItem}
-                        className="w-full flex items-center justify-center p-2 rounded-md text-sm bg-gray-700 hover:bg-gray-600 text-cyan-400 font-semibold transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-cyan-500"
+                        className="w-full flex items-center justify-center p-2 rounded-md text-sm bg-gray-700 hover:bg-gray-600 text-cyan-400 font-semibold transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-cyan-500 mb-2"
                         aria-label="Add new root section to outline"
                     >
                         <PlusIcon className="h-4 w-4 mr-2" />
                         Add New Section
                     </button>
+                    <div className="flex justify-between items-center px-2 py-1 text-xs text-gray-500 border-t border-gray-700 pt-2">
+                         <span>Project Word Count</span>
+                         <span className="font-mono text-cyan-500">{totalWordCount.toLocaleString()}</span>
+                    </div>
                 </div>
                 <ul>
                     {project.outline.map(item => (
