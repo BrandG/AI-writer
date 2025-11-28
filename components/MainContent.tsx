@@ -63,6 +63,18 @@ const PlusIcon: React.FC<{className?: string}> = ({ className }) => (
     </svg>
 );
 
+const ArrowDownTrayIcon: React.FC<{ className?: string }> = ({ className }) => (
+    <svg xmlns="http://www.w3.org/2000/svg" className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor">
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+    </svg>
+);
+
+const ArrowUpTrayIcon: React.FC<{ className?: string }> = ({ className }) => (
+    <svg xmlns="http://www.w3.org/2000/svg" className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor">
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
+    </svg>
+);
+
 const ImageViewer: React.FC<{ imageUrl?: string, alt: string, className: string, placeholder: React.ReactNode }> = ({ imageUrl, alt, className, placeholder }) => {
     const [displaySrc, setDisplaySrc] = useState<string | null>(null);
     const [isLoading, setIsLoading] = useState(false);
@@ -212,6 +224,7 @@ const CharacterView: React.FC<{
     onUpdateCharacter: (characterId: string, updatedData: Partial<Character>) => void;
     onDeleteCharacterRequest: (character: Character) => void;
 }> = ({ item, onGenerateImage, onDeleteImage, isGeneratingImage, onUpdateCharacter, onDeleteCharacterRequest }) => {
+    const fileInputRef = useRef<HTMLInputElement>(null);
     
     const handleToggleExport = (sectionId: string) => {
         onUpdateCharacter(item.id, {
@@ -222,8 +235,89 @@ const CharacterView: React.FC<{
         });
     };
 
+    const handleExport = () => {
+        const dataStr = JSON.stringify(item, null, 2);
+        const dataBlob = new Blob([dataStr], { type: "application/json" });
+        const url = URL.createObjectURL(dataBlob);
+        const link = document.createElement('a');
+        const safeName = item.name.replace(/[^a-z0-9\-_ ]/gi, '').trim().replace(/\s+/g, '_');
+        const timestamp = new Date().toISOString().replace(/:/g, '-').slice(0, 19);
+        link.download = `${safeName || 'Character'}-${timestamp}.json`;
+        link.href = url;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        URL.revokeObjectURL(url);
+    };
+
+    const handleImportClick = () => {
+        fileInputRef.current?.click();
+    };
+
+    const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+        const file = event.target.files?.[0];
+        if (!file) return;
+
+        const reader = new FileReader();
+        reader.onload = (e) => {
+            try {
+                const text = e.target?.result;
+                if (typeof text !== 'string') return;
+                const data = JSON.parse(text);
+                
+                if (data.type !== 'character') {
+                    alert("This file does not appear to be a character.");
+                    return;
+                }
+
+                // Exclude ID to preserve the current character slot
+                const { id, ...characterData } = data;
+                
+                // Confirm before overwriting
+                if (window.confirm(`Overwrite current character details with imported data for "${data.name || 'Unknown'}"?`)) {
+                    onUpdateCharacter(item.id, characterData);
+                }
+
+            } catch (err) {
+                console.error("Import failed", err);
+                alert("Failed to import character. Invalid JSON file.");
+            } finally {
+                if (fileInputRef.current) fileInputRef.current.value = '';
+            }
+        };
+        reader.readAsText(file);
+    };
+
     return (
         <>
+             <div className="flex justify-between items-center mb-6">
+                <div className="flex items-center gap-2">
+                     <button 
+                        onClick={handleExport}
+                        className="flex items-center gap-1 px-3 py-1.5 bg-gray-700 hover:bg-gray-600 rounded text-xs font-semibold text-gray-300 transition-colors"
+                        title="Export this character to JSON"
+                    >
+                        <ArrowDownTrayIcon className="w-4 h-4" />
+                        Export
+                    </button>
+                    <button 
+                        onClick={handleImportClick}
+                        className="flex items-center gap-1 px-3 py-1.5 bg-gray-700 hover:bg-gray-600 rounded text-xs font-semibold text-gray-300 transition-colors"
+                        title="Import character data from JSON (overwrites current fields)"
+                    >
+                        <ArrowUpTrayIcon className="w-4 h-4" />
+                        Import
+                    </button>
+                    <input 
+                        type="file" 
+                        ref={fileInputRef} 
+                        onChange={handleFileChange} 
+                        accept=".json,application/json" 
+                        className="hidden" 
+                    />
+                </div>
+            </div>
+
             <div className="group relative mb-8 aspect-square w-full max-w-md mx-auto bg-gray-800 rounded-lg overflow-hidden flex items-center justify-center border-2 border-gray-700">
                 <ImageViewer
                     imageUrl={item.imageUrl}

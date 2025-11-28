@@ -554,6 +554,36 @@ const WritingWorkspace: React.FC<WritingWorkspaceProps> = ({ project, onBack, on
         return { success: true, message: `Character '${args.name}' added successfully.` };
     };
 
+    const handleAddManualCharacter = () => {
+        const newCharacter: Character = {
+            id: uuidv4(),
+            type: 'character',
+            name: "New Character",
+            description: "",
+            group: "Ungrouped",
+        };
+        updateProjectState(prevProject => ({
+            ...prevProject,
+            characters: [...prevProject.characters, newCharacter],
+        }));
+        setSelectedItem(newCharacter);
+        setActiveTab('characters');
+    };
+
+    const handleImportCharacter = (characterData: Omit<Character, 'id' | 'type'>) => {
+        const newCharacter: Character = {
+            ...characterData,
+            id: uuidv4(),
+            type: 'character',
+        };
+        updateProjectState(prevProject => ({
+            ...prevProject,
+            characters: [...prevProject.characters, newCharacter],
+        }));
+        setSelectedItem(newCharacter);
+        setActiveTab('characters');
+    };
+
     const handleUpdateCharacter = (characterId: string, updatedData: Partial<Character>) => {
         updateProjectState(prevProject => {
             const newCharacters = prevProject.characters.map(char =>
@@ -1111,6 +1141,8 @@ Use the provided project context and chat history to give insightful and relevan
                     handleMoveOutlineSection({ sectionId: draggedId, targetSiblingId: targetId, position: position === 'above' ? 'before' : 'after' });
                 }
             }}
+            onAddCharacter={handleAddManualCharacter}
+            onImportCharacter={handleImportCharacter}
             onAddNote={handleAddNote}
             onDeleteNoteRequest={(note) => setNoteToDelete(note)}
             onAddTaskList={handleAddTaskList}

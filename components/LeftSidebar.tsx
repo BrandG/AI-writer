@@ -1,5 +1,5 @@
 
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { Project, SelectableItem, OutlineSection, Note, TaskList, Character } from '../types';
 import { SaveStatus, ActiveTab } from './WritingWorkspace';
 import StatusIndicator from './StatusIndicator';
@@ -20,6 +20,8 @@ interface LeftSidebarProps {
   onAddRootItem: () => void;
   onDeleteOutlineSection: (id: string) => void;
   onReorderOutline: (draggedId: string, targetId: string, position: 'above' | 'below' | 'on') => void;
+  onAddCharacter: () => void;
+  onImportCharacter: (characterData: Omit<Character, 'id' | 'type'>) => void;
   onAddNote: () => void;
   onDeleteNoteRequest: (note: Note) => void;
   onAddTaskList: () => void;
@@ -138,6 +140,12 @@ const ArrowDownTrayIcon: React.FC<{ className?: string }> = ({ className }) => (
     </svg>
 );
 
+const ArrowUpTrayIcon: React.FC<{ className?: string }> = ({ className }) => (
+    <svg xmlns="http://www.w3.org/2000/svg" className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor">
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
+    </svg>
+);
+
 interface DragOverInfo {
     id: string;
     position: 'above' | 'below' | 'on';
@@ -197,6 +205,7 @@ const OutlineItem: React.FC<OutlineItemProps> = ({
         }
         
         if (dragOverInfo?.id !== item.id || dragOverInfo?.position !== position) {
+            setDragOverInfo(null); // Force reset to trigger update if needed
             setDragOverInfo({ id: item.id, position });
         }
     };
@@ -411,7 +420,8 @@ const SimpleListItem: React.FC<{
 const LeftSidebar: React.FC<LeftSidebarProps> = ({ 
     project, activeTab, setActiveTab, selectedItem, onSelectItem, onBack, 
     onUpdateOutlineTitle, onToggleOutlineExport, onAddSubItem, onAddRootItem, 
-    onDeleteOutlineSection, onReorderOutline, onAddNote, onDeleteNoteRequest, 
+    onDeleteOutlineSection, onReorderOutline, onAddCharacter, onImportCharacter, 
+    onAddNote, onDeleteNoteRequest, 
     onAddTaskList, onDeleteTaskListRequest,
     saveStatus, isCollapsed, onToggleCollapse,
     onUndo, onRedo, canUndo, canRedo, onTriggerAdvisor,
@@ -419,6 +429,7 @@ const LeftSidebar: React.FC<LeftSidebarProps> = ({
 }) => {
   const [draggedItemId, setDraggedItemId] = useState<string | null>(null);
   const [dragOverInfo, setDragOverInfo] = useState<DragOverInfo | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const navItems = [
     { id: 'outline', label: 'Outline', icon: <ListBulletIcon className="h-6 w-6" /> },
@@ -452,12 +463,52 @@ const LeftSidebar: React.FC<LeftSidebarProps> = ({
 
   const totalWordCount = useMemo(() => calculateWordCount(project.outline), [project.outline]);
 
+  const handleImportClick = () => {
+      fileInputRef.current?.click();
+  };
+
+  const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+      const file = event.target.files?.[0];
+      if (!file) return;
+
+      const reader = new FileReader();
+      reader.onload = (e) => {
+          try {
+              const text = e.target?.result;
+              if (typeof text !== 'string') return;
+              const data = JSON.parse(text);
+              
+              if (data.type !== 'character') {
+                  alert("This file does not appear to be a character.");
+                  return;
+              }
+              // Exclude ID to allow creating a new one
+              const { id, ...characterData } = data;
+              onImportCharacter(characterData);
+          } catch (err) {
+              console.error("Import failed", err);
+              alert("Failed to import character. Invalid JSON file.");
+          } finally {
+              if (fileInputRef.current) fileInputRef.current.value = '';
+          }
+      };
+      reader.readAsText(file);
+  };
+
 
   return (
     <aside 
         className={`bg-gray-800 flex flex-col overflow-hidden relative ${isResizing ? '' : 'transition-all duration-300 ease-in-out'}`}
         style={{ width: isCollapsed ? '80px' : `${width}px`, padding: isCollapsed ? '0.5rem' : '1rem' }}
     >
+      <input 
+        type="file" 
+        ref={fileInputRef} 
+        onChange={handleFileChange} 
+        accept=".json,application/json" 
+        className="hidden" 
+      />
+
       <button
         onClick={onToggleCollapse}
         className={`absolute z-10 transition-all duration-300 ease-in-out focus:outline-none focus:ring-2 focus:ring-cyan-500 ${
@@ -605,6 +656,25 @@ const LeftSidebar: React.FC<LeftSidebarProps> = ({
         )}
         {activeTab === 'characters' && (
              <div className="space-y-4">
+                 <div className="flex gap-2 px-1 mb-2">
+                     <button
+                        onClick={onAddCharacter}
+                        className="flex-1 flex items-center justify-center p-2 rounded-md text-sm bg-gray-700 hover:bg-gray-600 text-cyan-400 font-semibold transition-colors duration-200"
+                        title="Add New Character"
+                    >
+                        <PlusIcon className="h-4 w-4 mr-1" />
+                        Add New
+                    </button>
+                     <button
+                        onClick={handleImportClick}
+                        className="flex-1 flex items-center justify-center p-2 rounded-md text-sm bg-gray-700 hover:bg-gray-600 text-gray-300 font-semibold transition-colors duration-200"
+                        title="Import Character from JSON"
+                    >
+                        <ArrowUpTrayIcon className="h-4 w-4 mr-1" />
+                        Import
+                    </button>
+                 </div>
+
                  {Object.entries(groupedCharacters).length > 0 ? (
                     Object.entries(groupedCharacters).map(([groupName, characters]) => (
                         <div key={groupName}>
